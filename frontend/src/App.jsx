@@ -51,6 +51,8 @@ function App() {
         showToast("Compare branch and base branch must be different.");
         return;
       }
+    }
+    
     // Parameter Rule 1: Check if base branch and compare branch are identical
     if (baseBranch.trim().toLowerCase() === compareBranch.trim().toLowerCase()) {
       showToast("Compare branch and base branch must be different.");
@@ -309,7 +311,6 @@ function App() {
       </div>
     </div>
   );
-}
 }
 
 export default App;
