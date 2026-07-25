@@ -41,7 +41,7 @@ const Poster = React.forwardRef(({ data }, ref) => {
   return (
     <div 
       ref={ref}
-      className="w-[800px] min-h-[800px] h-auto bg-black border border-white/20 rounded-3xl p-10 flex flex-col justify-between relative font-sans shadow-[0_12px_40px_rgba(0,0,0,0.8)] overflow-hidden"
+      className="w-[800px] min-h-[800px] h-auto bg-black border border-white/20 rounded-3xl p-10 flex flex-col justify-between relative font-sans shadow-[0_12px_40px_rgba(0,0,0,0.8)] overflow-hidden animate-magical-reveal"
     >
       {/* Dynamic Background Glow Blobs */}
       <div 
@@ -105,7 +105,7 @@ const Poster = React.forwardRef(({ data }, ref) => {
       {/* Features List */}
       <div className="relative z-10 flex-1 my-8 flex flex-col justify-center">
         <div className="space-y-4">
-          {data.features.map((feature, idx) => (
+          {(data.features || []).map((feature, idx) => (
             <div 
               key={idx} 
               className="flex items-start gap-4 p-5 rounded-2xl bg-white/[0.04] border backdrop-blur-md transition-all shadow-md"
