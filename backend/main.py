@@ -201,25 +201,23 @@ async def analyze_github(request: GitHubRequest):
         # Call Gemini
         prompt = f"""
 Act as a technical marketer and UI designer. Review this git diff.
-1. Extract the top 3-4 major user-facing features, architectural improvements, or significant bug fixes into engaging marketing bullet points.
+1. Extract the top 3-4 major user-facing features, architectural improvements, or significant bug fixes into engaging marketing feature cards.
 2. Infer the official or clean Application Name (e.g., 'Kiro' or 'FaceBook' or 'Instagram' etc).
-3. Analyze the diff to infer the visual branding/theme of the project (e.g. color accents, theme vibe like 'Neon Emerald', 'Deep Cobalt Blue', 'Cyber Violet', 'Amber Sunset', 'Rose Quartz', 'Glassmorphism Dark').
-   Provide hex colors: `primary_color` (accent hex e.g. #10B981 or #3B82F6), `secondary_color` (complementary gradient hex e.g. #06B6D4 or #8B5CF6).
 
 Enforce this strict JSON output schema:
 {{
   "app_name": "Clean formatted name of the application",
-  "theme": {{
-    "theme_name": "Descriptive theme name",
-    "primary_color": "#HEXCOLOR",
-    "secondary_color": "#HEXCOLOR"
-  }},
-  "title": "A short, catchy title for this release (e.g. 'Performance Boost & New UI')",
-  "summary": "A 1-2 sentence summary of what this release is about.",
+  "headline": "A short, extremely punchy title (max 5 words).",
+  "subheadline": "A slightly longer, descriptive subtitle.",
+  "summary": "A 2-3 sentence engaging overview of the update.",
+  "theme_keyword": "A single word (e.g., 'speed', 'ui', 'security').",
   "features": [
-    "feature 1",
-    "feature 2",
-    "feature 3"
+    {{
+      "category": "Major Feature | Polish | Fix",
+      "title": "Action-oriented feature name",
+      "description": "Detailed 1-2 sentence explanation of the impact.",
+      "icon_hint": "name of a standard icon (e.g., 'zap', 'shield', 'eye', 'tool', 'bug')"
+    }}
   ]
 }}
 
@@ -248,25 +246,37 @@ Here is the diff:
                 if not data.get("app_name"):
                     data["app_name"] = repo.replace("-", " ").replace("_", " ").title()
                 
-                if not data.get("title"):
-                    data["title"] = "Release Update"
+                if not data.get("headline"):
+                    data["headline"] = "Release Update"
+                    
+                if not data.get("subheadline"):
+                    data["subheadline"] = "New features and improvements"
                     
                 if not data.get("summary"):
-                    data["summary"] = "Various improvements and bug fixes have been made in this release."
+                    data["summary"] = "Various improvements and bug fixes have been made in this release to enhance stability and performance."
+                    
+                if not data.get("theme_keyword"):
+                    data["theme_keyword"] = "update"
                     
                 if not data.get("features") or not isinstance(data["features"], list):
-                    data["features"] = ["Codebase optimizations", "Refactoring and cleanup"]
+                    data["features"] = [
+                        {
+                            "category": "Polish",
+                            "title": "Codebase optimizations",
+                            "description": "General refactoring and performance tuning across the application.",
+                            "icon_hint": "zap"
+                        },
+                        {
+                            "category": "Fix",
+                            "title": "Bug Fixes",
+                            "description": "Resolved various edge cases and UI inconsistencies.",
+                            "icon_hint": "bug"
+                        }
+                    ]
 
                 data["app_owner"] = owner
                 data["app_repo"] = repo
                 data["app_avatar"] = app_logo_b64 or f"https://github.com/{owner}.png"
-
-                if "theme" not in data or not isinstance(data["theme"], dict):
-                    data["theme"] = {
-                        "theme_name": "Modern Neon",
-                        "primary_color": "#3B82F6",
-                        "secondary_color": "#8B5CF6"
-                    }
 
                 return json.dumps(data)
             except Exception as e:
