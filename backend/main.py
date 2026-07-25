@@ -229,7 +229,6 @@ async def analyze_github(request: GitHubRequest):
 Act as a technical marketer and UI designer. Review this git diff.
 1. Extract the top 3-4 major user-facing features, architectural improvements, or significant bug fixes into engaging marketing bullet points.
 2. Infer the official or clean Application Name (e.g., 'Kiro' or 'FaceBook' or 'Instagram' etc).
-2. Infer the official or clean Application Name (e.g., 'Semester GPA Calculator' or 'FaceBook' or 'Instagram' etc).
 3. Analyze the diff to infer the visual branding/theme of the project (e.g. color accents, theme vibe like 'Neon Emerald', 'Deep Cobalt Blue', 'Cyber Violet', 'Amber Sunset', 'Rose Quartz', 'Glassmorphism Dark').
    Provide hex colors: `primary_color` (accent hex e.g. #10B981 or #3B82F6), `secondary_color` (complementary gradient hex e.g. #06B6D4 or #8B5CF6).
 
