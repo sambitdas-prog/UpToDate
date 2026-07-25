@@ -81,7 +81,8 @@ function App() {
     };
 
     try {
-      const response = await fetch('http://localhost:8000/api/analyze', {
+      const apiUrl = import.meta.env.PROD ? '/api/analyze' : 'http://localhost:8000/api/analyze';
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
