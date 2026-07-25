@@ -1,11 +1,13 @@
 import { useState, useRef } from 'react';
 import { toPng } from 'html-to-image';
+import { Download, Loader2, Code, AlertTriangle, X, Sparkles, Zap, GitCompare } from 'lucide-react';
 import { Download, Loader2, Code, AlertTriangle, X, Sparkles } from 'lucide-react';
 import Poster from './components/Poster';
 import LoadingPoster from './components/LoadingPoster';
 
 function App() {
   const [url, setUrl] = useState('');
+  const [mode, setMode] = useState('auto'); // 'auto' | 'manual'
   const [baseBranch, setBaseBranch] = useState('main');
   const [compareBranch, setCompareBranch] = useState('develop');
   const [loading, setLoading] = useState(false);
@@ -32,6 +34,7 @@ function App() {
       cleanUrl = `https://${cleanUrl}`;
     }
 
+    // Parameter Rule: Check URL typo / format
     // Parameter Rule 3: Check URL typo / format
     const githubMatch = cleanUrl.match(/github\.com[:/]([^/]+)\/([^/\s?#]+)/);
     if (!cleanUrl || !githubMatch || !githubMatch[1] || !githubMatch[2]) {
@@ -39,6 +42,16 @@ function App() {
       return;
     }
 
+    // Manual mode validations
+    if (mode === 'manual') {
+      if (!baseBranch.trim() || !compareBranch.trim()) {
+        showToast("Both base and head branches are required for manual mode.");
+        return;
+      }
+      if (baseBranch.trim().toLowerCase() === compareBranch.trim().toLowerCase()) {
+        showToast("Compare branch and base branch must be different.");
+        return;
+      }
     // Parameter Rule 1: Check if base branch and compare branch are identical
     if (baseBranch.trim().toLowerCase() === compareBranch.trim().toLowerCase()) {
       showToast("Compare branch and base branch must be different.");
@@ -53,17 +66,21 @@ function App() {
     setLoading(true);
     setPosterData(null);
 
+    const payload = {
+      repo_url: cleanUrl,
+      url: cleanUrl,
+      base_branch: mode === 'manual' ? baseBranch.trim() : null,
+      head_branch: mode === 'manual' ? compareBranch.trim() : null,
+      compare_branch: mode === 'manual' ? compareBranch.trim() : null,
+    };
+
     try {
-      const response = await fetch('http://localhost:8000/api/v1/analyze-github', {
+      const response = await fetch('http://localhost:8000/api/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          url: cleanUrl,
-          base_branch: baseBranch.trim(),
-          compare_branch: compareBranch.trim(),
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
@@ -106,6 +123,20 @@ function App() {
 
   return (
     <div className="min-h-screen bg-black text-white relative overflow-hidden overflow-x-hidden font-sans flex flex-col items-center justify-center p-4 md:p-8 transition-all duration-700">
+      {/* Top-Left Home Button (Only visible in Split View) */}
+      {isExpanded && (
+        <button
+          onClick={() => {
+            setIsExpanded(false);
+            setPosterData(null);
+            setError('');
+          }}
+          className="fixed top-6 left-6 md:top-8 md:left-8 z-50 flex items-center gap-2.5 text-white/80 hover:text-white transition-all group animate-fade-in"
+        >
+          <Code className="w-6 h-6 group-hover:scale-110 transition-transform duration-300" />
+          <span className="text-xl font-bold tracking-tight drop-shadow-md">UpToDate</span>
+        </button>
+      )}
       {/* Top-Right Toast Notification Pop-up */}
       {toast.visible && (
         <div className="fixed top-6 right-6 z-50 animate-fade-in max-w-md bg-black/90 backdrop-blur-2xl border border-red-500/50 text-white p-4 rounded-2xl shadow-[0_10px_30px_rgba(255,0,0,0.2)] flex items-start gap-3.5">
@@ -131,6 +162,10 @@ function App() {
       {/* Phase 1: Hero Section (Visible in Initial Centered State) */}
       {!isExpanded && (
         <div className="relative z-10 text-center max-w-2xl mb-10 animate-fade-in px-4">
+          <div className="flex items-center justify-center gap-3 mb-6">
+            <Code className="w-8 h-8 text-white" />
+            <span className="text-2xl font-bold text-white tracking-tight drop-shadow-md">UpToDate</span>
+          </div>
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/15 backdrop-blur-xl mb-6 shadow-inner">
             <Sparkles className="w-4 h-4 text-cyan-400" />
             <span className="text-white/80 font-medium tracking-wide text-xs uppercase">AI Release Poster Generator</span>
@@ -148,6 +183,44 @@ function App() {
       <div className={`w-full max-w-7xl flex flex-col ${isExpanded ? 'md:flex-row items-center justify-center' : 'items-center justify-center'} gap-6 md:gap-8 relative z-10 transition-all duration-700 ease-in-out`}>
         
         {/* Form Card (Center in Phase 1, Shifts & Shrinks to Left Sidebar in Phase 2/3) */}
+        <div className={`w-full bg-black/40 backdrop-blur-2xl border border-white/20 rounded-3xl p-6 md:p-8 shadow-[0_8px_32px_rgba(255,255,255,0.05)] flex flex-col shrink-0 transition-all duration-700 ease-in-out ${isExpanded ? 'max-w-md md:mr-4' : 'max-w-lg'}`}>
+          {isExpanded && (
+            <div className="flex items-center justify-between mb-5">
+              <span className="text-sm font-semibold text-white/80">Configure Analysis</span>
+              <span className="text-[10px] font-mono bg-white/10 px-2 py-0.5 rounded-full text-white/60 border border-white/10 uppercase tracking-wider">
+                Split View
+              </span>
+            </div>
+          )}
+
+          {/* Mode Switcher Segmented Control */}
+          <div className="flex bg-white/5 p-0.5 rounded-xl border border-white/10 mb-5 w-full mx-auto">
+            <button
+              type="button"
+              onClick={() => { setMode('auto'); setError(''); }}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-medium transition-all duration-300 ${
+                mode === 'auto'
+                  ? 'bg-white text-black shadow-sm'
+                  : 'text-white/50 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Zap className="w-3.5 h-3.5" />
+              Auto-Detection
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode('manual'); setError(''); }}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-medium transition-all duration-300 ${
+                mode === 'manual'
+                  ? 'bg-white text-black shadow-sm'
+                  : 'text-white/50 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <GitCompare className="w-3.5 h-3.5" />
+              Compare Branches
+            </button>
+          </div>
+
         <div className={`w-full bg-black/40 backdrop-blur-2xl border border-white/20 rounded-3xl p-8 shadow-[0_8px_32px_rgba(255,255,255,0.05)] flex flex-col shrink-0 transition-all duration-700 ease-in-out ${isExpanded ? 'max-w-md md:mr-4' : 'max-w-xl'}`}>
           <div className="mb-6 flex items-center justify-between">
             <h1 className="text-2xl font-bold text-white flex items-center gap-3 drop-shadow-md">
@@ -174,12 +247,44 @@ function App() {
                 type="text" 
                 required
                 placeholder="https://github.com/owner/repo"
+                className="w-full bg-black/50 border border-white/20 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:border-white focus:ring-1 focus:ring-white shadow-inner text-white placeholder-white/30 transition-all"
                 className="w-full bg-black/50 border border-white/20 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-white focus:ring-1 focus:ring-white shadow-inner text-white placeholder-white/30 transition-all"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
               />
+              {mode === 'auto' && (
+                <p className="mt-2 text-xs text-white/50 flex items-center gap-1.5">
+                  <span>ℹ️</span> We'll automatically analyze recent commits from the default branch.
+                </p>
+              )}
             </div>
 
+            {mode === 'manual' && (
+              <div className="grid grid-cols-2 gap-4 animate-fade-in">
+                <div>
+                  <label className="block text-sm font-medium text-white/80 mb-2">Base Branch</label>
+                  <input 
+                    type="text" 
+                    required
+                    placeholder="main"
+                    className="w-full bg-black/50 border border-white/20 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:border-white focus:ring-1 focus:ring-white shadow-inner text-white placeholder-white/30 transition-all"
+                    value={baseBranch}
+                    onChange={(e) => setBaseBranch(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-white/80 mb-2">Compare Branch</label>
+                  <input 
+                    type="text" 
+                    required
+                    placeholder="develop"
+                    className="w-full bg-black/50 border border-white/20 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:border-white focus:ring-1 focus:ring-white shadow-inner text-white placeholder-white/30 transition-all"
+                    value={compareBranch}
+                    onChange={(e) => setCompareBranch(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-white/80 mb-2">Base Branch</label>

@@ -16,6 +16,8 @@ from pydantic import BaseModel
 # pyrefly: ignore [missing-import]
 import google.generativeai as genai
 # pyrefly: ignore [missing-import]
+from typing import Optional
+# pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -40,6 +42,24 @@ else:
 
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 
+class GitHubRequest(BaseModel):
+    repo_url: Optional[str] = None
+    url: Optional[str] = None
+    base_branch: Optional[str] = None
+    head_branch: Optional[str] = None
+    compare_branch: Optional[str] = None
+
+# Alias for backwards compatibility
+AnalyzeRequest = GitHubRequest
+
+def parse_github_url(url: str):
+    """Extracts owner and repo from a GitHub URL."""
+    if not url or not url.strip():
+        raise ValueError("The URL of the Repository is not valid. Please enter a valid Repository URL.")
+    cleaned_url = url.strip()
+    match = re.search(r"github\.com[:/]([^/]+)/([^/\s?#]+)", cleaned_url)
+    if not match:
+        raise ValueError("Invalid GitHub URL format.")
 class AnalyzeRequest(BaseModel):
     url: str
     base_branch: str
@@ -56,6 +76,8 @@ def extract_owner_repo(github_url: str):
     if repo.endswith(".git"):
         repo = repo[:-4]
     return owner, repo
+
+extract_owner_repo = parse_github_url
 
 async def fetch_avatar_base64(client: httpx.AsyncClient, owner: str) -> str:
     url = f"https://github.com/{owner}.png"
@@ -90,14 +112,23 @@ async def fetch_app_logo_base64(client: httpx.AsyncClient, owner: str, repo: str
     # Fallback to owner avatar if no app logo/favicon found in repo
     return await fetch_avatar_base64(client, owner)
 
+@app.post("/api/analyze")
 @app.post("/api/v1/analyze-github")
-async def analyze_github(request: AnalyzeRequest):
-    # Extract owner and repo cleanly
+async def analyze_github(request: GitHubRequest):
+    raw_url = request.repo_url or request.url
+    if not raw_url:
+        raise HTTPException(status_code=400, detail="The URL of the Repository is not valid. Please enter a valid Repository URL.")
+        
     try:
-        owner, repo = extract_owner_repo(request.url)
+        owner, repo = parse_github_url(raw_url)
     except ValueError as err:
         raise HTTPException(status_code=400, detail=str(err))
     
+    base_b = request.base_branch.strip() if request.base_branch and request.base_branch.strip() else None
+    head_b = request.head_branch or request.compare_branch
+    head_b = head_b.strip() if head_b and head_b.strip() else None
+
+    # Base headers for GitHub API calls
     base = request.base_branch.strip()
     compare = request.compare_branch.strip()
     
@@ -111,15 +142,51 @@ async def analyze_github(request: AnalyzeRequest):
     diff_url = f"https://api.github.com/repos/{owner}/{repo}/compare/{base}...{compare}"
     
     headers = {
-        "Accept": "application/vnd.github.v3.diff",
+        "Accept": "application/vnd.github.v3+json",
         "X-GitHub-Api-Version": "2022-11-28",
         "User-Agent": "UpToDate-App"
     }
-    
     if GITHUB_TOKEN:
         headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
-    
+
     async with httpx.AsyncClient(follow_redirects=True) as client:
+        # MODE 1: AUTO-DETECT COMMITS
+        if not base_b and not head_b:
+            commits_url = f"https://api.github.com/repos/{owner}/{repo}/commits?per_page=10"
+            commits_resp = await client.get(commits_url, headers=headers)
+            
+            if commits_resp.status_code == 404:
+                raise HTTPException(status_code=404, detail=f"GitHub returned 404 Not Found. Please verify repository '{owner}/{repo}' exists and is accessible.")
+            elif commits_resp.status_code != 200:
+                raise HTTPException(status_code=commits_resp.status_code, detail="Failed to fetch commits. Check repo URL.")
+            
+            commits = commits_resp.json()
+            if not isinstance(commits, list) or len(commits) < 2:
+                raise HTTPException(status_code=400, detail="Not enough commits to generate a diff.")
+            
+            head_ref = commits[0]['sha']
+            base_ref = commits[-1]['sha']
+            ref_for_logo = head_ref
+
+        # MODE 2: MANUAL BRANCH COMPARISON
+        else:
+            if not base_b or not head_b:
+                raise HTTPException(status_code=400, detail="Both base and head branches are required for manual mode.")
+                
+            if base_b.lower() == head_b.lower():
+                raise HTTPException(status_code=400, detail="Compare branch and base branch must be different.")
+
+            base_ref = base_b
+            head_ref = head_b
+            ref_for_logo = head_ref
+
+        # Format comparison endpoint
+        compare_url = f"https://api.github.com/repos/{owner}/{repo}/compare/{base_ref}...{head_ref}"
+        diff_headers = headers.copy()
+        diff_headers["Accept"] = "application/vnd.github.v3.diff" # Crucial for raw diff
+        
+        app_logo_b64 = await fetch_app_logo_base64(client, owner, repo, ref_for_logo)
+        response = await client.get(compare_url, headers=diff_headers)
         # Fetch repository application logo or fallback to owner avatar
         app_logo_b64 = await fetch_app_logo_base64(client, owner, repo, compare)
         response = await client.get(diff_url, headers=headers)
@@ -127,7 +194,7 @@ async def analyze_github(request: AnalyzeRequest):
         if response.status_code == 404:
             raise HTTPException(
                 status_code=404, 
-                detail=f"GitHub returned 404 Not Found. Please verify repository '{owner}/{repo}' and branches '{base}' and '{compare}' exist and are accessible."
+                detail=f"GitHub returned 404 Not Found. Please verify repository '{owner}/{repo}' and branches '{base_ref}' and '{head_ref}' exist and are accessible."
             )
         elif response.status_code != 200:
             raise HTTPException(status_code=response.status_code, detail=f"Failed to fetch diff from GitHub: {response.text}")
@@ -145,6 +212,7 @@ async def analyze_github(request: AnalyzeRequest):
                     "app_owner": owner,
                     "app_repo": repo,
                     "app_avatar": app_logo_b64 or f"https://github.com/{owner}.png",
+                    "message": f"No release poster needed as the contents of both references ('{base_ref}' and '{head_ref}') are identical."
                     "message": f"No release poster needed as the contents of both branches ('{base}' and '{compare}') are identical."
                 }
             )
@@ -160,6 +228,7 @@ async def analyze_github(request: AnalyzeRequest):
         prompt = f"""
 Act as a technical marketer and UI designer. Review this git diff.
 1. Extract the top 3-4 major user-facing features, architectural improvements, or significant bug fixes into engaging marketing bullet points.
+2. Infer the official or clean Application Name (e.g., 'Kiro' or 'FaceBook' or 'Instagram' etc).
 2. Infer the official or clean Application Name (e.g., 'Semester GPA Calculator' or 'FaceBook' or 'Instagram' etc).
 3. Analyze the diff to infer the visual branding/theme of the project (e.g. color accents, theme vibe like 'Neon Emerald', 'Deep Cobalt Blue', 'Cyber Violet', 'Amber Sunset', 'Rose Quartz', 'Glassmorphism Dark').
    Provide hex colors: `primary_color` (accent hex e.g. #10B981 or #3B82F6), `secondary_color` (complementary gradient hex e.g. #06B6D4 or #8B5CF6).
