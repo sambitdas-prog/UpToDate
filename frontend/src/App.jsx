@@ -1,11 +1,12 @@
 import { useState, useRef } from 'react';
 import { toPng } from 'html-to-image';
-import { Download, Loader2, Code, AlertTriangle, X, Sparkles, Zap, GitCompare } from 'lucide-react';
+import { Download, Loader2, Code, AlertTriangle, X, Sparkles, Zap, GitCompare, Upload } from 'lucide-react';
 import Poster from './components/Poster';
 import LoadingPoster from './components/LoadingPoster';
 
 function App() {
   const [url, setUrl] = useState('');
+  const [heroImageUrl, setHeroImageUrl] = useState('');
   const [mode, setMode] = useState('auto'); // 'auto' | 'manual'
   const [baseBranch, setBaseBranch] = useState('main');
   const [compareBranch, setCompareBranch] = useState('develop');
@@ -24,6 +25,17 @@ function App() {
     }, 4500);
   };
 
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setHeroImageUrl(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleAnalyze = async (e) => {
     e.preventDefault();
     setError('');
@@ -34,7 +46,6 @@ function App() {
     }
 
     // Parameter Rule: Check URL typo / format
-    // Parameter Rule 3: Check URL typo / format
     const githubMatch = cleanUrl.match(/github\.com[:/]([^/]+)\/([^/\s?#]+)/);
     if (!cleanUrl || !githubMatch || !githubMatch[1] || !githubMatch[2]) {
       showToast("The URL of the Repository is not valid. Please enter a valid Repository URL.");
@@ -51,12 +62,6 @@ function App() {
         showToast("Compare branch and base branch must be different.");
         return;
       }
-    }
-    
-    // Parameter Rule 1: Check if base branch and compare branch are identical
-    if (baseBranch.trim().toLowerCase() === compareBranch.trim().toLowerCase()) {
-      showToast("Compare branch and base branch must be different.");
-      return;
     }
 
     // Trigger Phase 2 transition choreography (Form Shift & Shrink + Poster Reveal)
@@ -138,6 +143,20 @@ function App() {
           <span className="text-xl font-bold tracking-tight drop-shadow-md">UpToDate</span>
         </button>
       )}
+      {/* Top-Right GitHub Link Button (Only visible on Home screen before generation) */}
+      {!isExpanded && !loading && (
+        <a 
+          href="https://github.com" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="fixed top-6 right-6 md:top-8 md:right-8 z-50 flex items-center gap-2.5 bg-white/10 hover:bg-white/20 border border-white/20 px-4 py-2.5 rounded-full text-white/90 hover:text-white transition-all group shadow-lg backdrop-blur-md"
+        >
+          <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current group-hover:scale-110 transition-transform duration-300">
+            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+          </svg>
+          <span className="font-semibold tracking-wide text-sm hidden sm:inline-block">GitHub</span>
+        </a>
+      )}
       {/* Top-Right Toast Notification Pop-up */}
       {toast.visible && (
         <div className="fixed top-6 right-6 z-50 animate-fade-in max-w-md bg-black/90 backdrop-blur-2xl border border-red-500/50 text-white p-4 rounded-2xl shadow-[0_10px_30px_rgba(255,0,0,0.2)] flex items-start gap-3.5">
@@ -160,31 +179,32 @@ function App() {
       <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-white/10 rounded-full blur-[128px] pointer-events-none animate-pulse" style={{ animationDuration: '6s' }}></div>
       <div className="absolute bottom-1/4 right-1/4 w-[600px] h-[600px] bg-white/5 rounded-full blur-[128px] pointer-events-none animate-pulse" style={{ animationDuration: '8s', animationDelay: '1s' }}></div>
 
-      {/* Phase 1: Hero Section (Visible in Initial Centered State) */}
-      {!isExpanded && (
-        <div className="relative z-10 text-center max-w-2xl mb-10 animate-fade-in px-4">
-          <div className="flex items-center justify-center gap-3 mb-6">
-            <Code className="w-8 h-8 text-white" />
-            <span className="text-2xl font-bold text-white tracking-tight drop-shadow-md">UpToDate</span>
-          </div>
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/15 backdrop-blur-xl mb-6 shadow-inner">
-            <Sparkles className="w-4 h-4 text-cyan-400" />
-            <span className="text-white/80 font-medium tracking-wide text-xs uppercase">AI Release Poster Generator</span>
-          </div>
-          <h1 className="text-4xl md:text-6xl font-black text-white leading-tight mb-4 tracking-tight drop-shadow-2xl">
-            Turn Code Commits into <span className="bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">Release Graphics</span>
-          </h1>
-          <p className="text-lg text-white/60 font-light leading-relaxed">
-            Generate beautiful release posters from your GitHub code diffs using AI.
-          </p>
-        </div>
-      )}
-
-      {/* Main Container Area (Transitions between Centered Layout & Split Screen Layout) */}
-      <div className={`w-full max-w-7xl flex flex-col ${isExpanded ? 'md:flex-row items-center justify-center' : 'items-center justify-center'} gap-6 md:gap-8 relative z-10 transition-all duration-700 ease-in-out`}>
+      {/* Main Container Area (Transitions between Split Screen Layouts) */}
+      <div className={`w-full max-w-7xl flex flex-col md:flex-row items-center justify-center gap-10 md:gap-16 relative z-10 transition-all duration-700 ease-in-out px-4`}>
         
-        {/* Form Card */}
-        <div className={`w-full bg-black/40 backdrop-blur-2xl border border-white/20 rounded-3xl p-6 md:p-8 shadow-[0_8px_32px_rgba(255,255,255,0.05)] flex flex-col shrink-0 transition-all duration-700 ease-in-out ${isExpanded ? 'max-w-md md:mr-4' : 'max-w-lg'}`}>
+        {/* Phase 1: Hero Section (Visible in Initial State, Left Side) */}
+        {!isExpanded && (
+          <div className="flex-1 relative z-10 text-left max-w-2xl animate-fade-in order-1 md:order-1">
+            <div className="flex items-center justify-start gap-3 mb-6">
+              <Code className="w-8 h-8 text-white" />
+              <span className="text-2xl font-bold text-white tracking-tight drop-shadow-md">UpToDate</span>
+            </div>
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/15 backdrop-blur-xl mb-6 shadow-inner">
+              <Sparkles className="w-4 h-4 text-cyan-400" />
+              <span className="text-white/80 font-medium tracking-wide text-xs uppercase">AI Release Poster Generator</span>
+            </div>
+            <h1 className="text-4xl md:text-6xl font-black text-white leading-tight mb-4 tracking-tight drop-shadow-2xl">
+              Turn Code Commits into <br className="hidden lg:block"/>
+              <span className="bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">Release Graphics</span>
+            </h1>
+            <p className="text-lg text-white/60 font-light leading-relaxed max-w-xl">
+              Stop writing boring changelogs. Instantly transform your Git commits into stunning, shareable graphics that your users will actually want to read.
+            </p>
+          </div>
+        )}
+
+        {/* Form Card (Right Sidebar initially, Shifts Left in Phase 2) */}
+        <div className={`w-full bg-black/40 backdrop-blur-2xl border border-white/20 rounded-3xl p-6 md:p-8 shadow-[0_8px_32px_rgba(255,255,255,0.05)] flex flex-col shrink-0 transition-all duration-700 ease-in-out ${isExpanded ? 'max-w-md md:mr-4 order-1 md:order-1' : 'max-w-lg order-2 md:order-2'}`}>
           {isExpanded && (
             <div className="flex items-center justify-between mb-5">
               <span className="text-sm font-semibold text-white/80">Configure Analysis</span>
@@ -239,7 +259,6 @@ function App() {
                 </p>
               )}
             </div>
-
             {mode === 'manual' && (
               <div className="grid grid-cols-2 gap-4 animate-fade-in">
                 <div>
@@ -266,6 +285,24 @@ function App() {
                 </div>
               </div>
             )}
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-white/80">Example Image URL (Optional)</label>
+                <label className="text-xs text-cyan-400 hover:text-cyan-300 cursor-pointer flex items-center gap-1.5 transition-colors">
+                  <Upload className="w-3.5 h-3.5" />
+                  Upload Local
+                  <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                </label>
+              </div>
+              <input 
+                type="text" 
+                placeholder="Paste image URL or upload..."
+                className="w-full bg-black/50 border border-white/20 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:border-white focus:ring-1 focus:ring-white shadow-inner text-white placeholder-white/30 transition-all"
+                value={heroImageUrl}
+                onChange={(e) => setHeroImageUrl(e.target.value)}
+              />
+            </div>
 
             <button 
               type="submit" 
@@ -303,7 +340,7 @@ function App() {
               {loading ? (
                 <LoadingPoster />
               ) : (
-                <Poster key={posterData?.title || 'poster'} ref={posterRef} data={posterData} />
+                <Poster key={posterData?.headline || 'poster'} ref={posterRef} data={{...posterData, heroImageUrl}} />
               )}
             </div>
           </div>

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { GitCompare, Sparkles, Wand2, Loader2 } from 'lucide-react';
 
@@ -62,22 +61,22 @@ export default function LoadingPoster() {
 
       {/* Header Skeleton */}
       <div className="relative z-10 flex items-center justify-between gap-4 mb-8">
-        <div className="flex items-center gap-3 bg-white/5 border border-white/10 px-4 py-2.5 rounded-2xl">
-          <div className="w-8 h-8 rounded-xl bg-white/10 animate-pulse"></div>
-          <div className="w-36 h-5 bg-white/10 rounded-md animate-pulse"></div>
+        <div className="flex items-center gap-3 bg-white/10 border border-white/15 backdrop-blur-xl px-4 py-2.5 rounded-2xl shadow-lg">
+          <div className="w-8 h-8 rounded-xl bg-white/20 animate-pulse"></div>
+          <div className="w-32 h-6 bg-white/10 rounded-md animate-pulse"></div>
         </div>
-        <div className="px-4 py-2 rounded-full bg-white/5 border border-white/10 flex items-center gap-2">
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border backdrop-blur-xl shadow-md bg-white/5 border-white/20">
           <Sparkles className="w-4 h-4 text-white/40 animate-spin" />
-          <div className="w-28 h-4 bg-white/10 rounded-md animate-pulse"></div>
+          <div className="w-32 h-4 bg-white/10 rounded-md animate-pulse"></div>
         </div>
       </div>
 
-      {/* Title & Summary Skeleton */}
-      <div className="relative z-10 space-y-4 my-2">
-        <div className="h-10 bg-white/10 rounded-2xl w-4/5 animate-pulse"></div>
-        <div className="h-10 bg-white/10 rounded-2xl w-3/5 animate-pulse"></div>
-        <div className="h-5 bg-white/5 rounded-lg w-full animate-pulse mt-4"></div>
-        <div className="h-5 bg-white/5 rounded-lg w-2/3 animate-pulse"></div>
+      {/* Title & Summary Skeleton (Centered) */}
+      <div className="relative z-10 flex flex-col items-center text-center my-2">
+        <div className="h-14 bg-white/10 rounded-2xl w-4/5 animate-pulse mb-4"></div>
+        <div className="h-8 bg-white/10 rounded-2xl w-2/5 animate-pulse mb-8"></div>
+        <div className="h-5 bg-white/5 rounded-lg w-full max-w-3xl animate-pulse mb-3"></div>
+        <div className="h-5 bg-white/5 rounded-lg w-2/3 max-w-3xl animate-pulse mb-6"></div>
       </div>
 
       {/* Interactive Active Stage Indicator Card */}
@@ -110,26 +109,32 @@ export default function LoadingPoster() {
         </div>
       </div>
 
-      {/* Feature List Skeletons */}
-      <div className="relative z-10 space-y-3 my-2">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="flex items-center gap-4 p-4 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-md">
-            <div className="w-6 h-6 rounded-lg bg-white/10 animate-pulse shrink-0"></div>
-            <div className="flex-1 space-y-2">
-              <div className="h-4 bg-white/10 rounded-md w-11/12 animate-pulse"></div>
-              <div className="h-3 bg-white/5 rounded-md w-3/4 animate-pulse"></div>
+      {/* Feature List Skeletons (Grid Layout) */}
+      <div className="relative z-10 flex-1 w-full my-4">
+        <div className="grid grid-cols-2 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="flex flex-col gap-3 p-5 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-md shadow-lg">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-white/10 animate-pulse"></div>
+                <div className="w-16 h-4 rounded-full bg-black/50 animate-pulse"></div>
+              </div>
+              <div>
+                <div className="h-5 bg-white/10 rounded-md w-3/4 animate-pulse mb-2"></div>
+                <div className="h-4 bg-white/5 rounded-md w-full animate-pulse mb-1"></div>
+                <div className="h-4 bg-white/5 rounded-md w-5/6 animate-pulse"></div>
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
       {/* Footer Skeleton */}
-      <div className="relative z-10 mt-6 pt-6 border-t border-white/10 flex justify-between items-center text-white/40 text-xs">
+      <div className="relative z-10 mt-8 pt-6 border-t border-white/10 flex justify-between items-center text-white/40">
         <div className="flex items-center gap-2">
           <Loader2 className="w-4 h-4 animate-spin text-white/40" />
-          <span className="font-medium text-white/60">Generating AI Release Poster...</span>
+          <span className="font-medium text-white/60 text-sm">Generating AI Release Poster...</span>
         </div>
-        <div className="text-white/40 font-mono">Step {currentStage.id}/3</div>
+        <div className="text-white/40 font-mono text-xs">Step {currentStage.id}/3</div>
       </div>
     </div>
   );

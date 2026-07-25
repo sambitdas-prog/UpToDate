@@ -3,20 +3,14 @@
 @tailwind utilities;
 
 @layer base {
-  html, body {
+  body {
     @apply bg-black text-white;
-    overflow-x: hidden !important;
-    max-width: 100vw;
   }
   
   /* Custom Scrollbar for Webkit */
   ::-webkit-scrollbar {
     width: 8px;
-    height: 0px; /* Hide horizontal scrollbar track */
-  }
-  ::-webkit-scrollbar-horizontal {
-    display: none;
-    height: 0px;
+    height: 8px;
   }
   ::-webkit-scrollbar-track {
     background: rgba(0, 0, 0, 0.4);
@@ -44,42 +38,4 @@
 
 .animate-fade-in {
   animation: fade-in 0.4s ease-out forwards;
-}
-
-@keyframes magical-reveal {
-  0% {
-    opacity: 0;
-    transform: translateY(-24px) scale(0.96);
-    filter: blur(10px);
-    clip-path: inset(0 0 100% 0);
-  }
-  50% {
-    filter: blur(3px);
-    clip-path: inset(0 0 0 0);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-    filter: blur(0px);
-    clip-path: inset(0 0 0 0);
-  }
-}
-
-.animate-magical-reveal {
-  animation: magical-reveal 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-@keyframes popup-scale {
-  0% {
-    opacity: 0;
-    transform: scale(0.93) translateY(15px);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
-.animate-popup-scale {
-  animation: popup-scale 0.75s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
