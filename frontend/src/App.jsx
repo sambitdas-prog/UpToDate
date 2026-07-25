@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { toPng } from 'html-to-image';
 import { Download, Loader2, Code, AlertTriangle, X, Sparkles, Zap, GitCompare } from 'lucide-react';
+import { Download, Loader2, Code, AlertTriangle, X, Sparkles } from 'lucide-react';
 import Poster from './components/Poster';
 import LoadingPoster from './components/LoadingPoster';
 
@@ -34,6 +35,7 @@ function App() {
     }
 
     // Parameter Rule: Check URL typo / format
+    // Parameter Rule 3: Check URL typo / format
     const githubMatch = cleanUrl.match(/github\.com[:/]([^/]+)\/([^/\s?#]+)/);
     if (!cleanUrl || !githubMatch || !githubMatch[1] || !githubMatch[2]) {
       showToast("The URL of the Repository is not valid. Please enter a valid Repository URL.");
@@ -50,6 +52,10 @@ function App() {
         showToast("Compare branch and base branch must be different.");
         return;
       }
+    // Parameter Rule 1: Check if base branch and compare branch are identical
+    if (baseBranch.trim().toLowerCase() === compareBranch.trim().toLowerCase()) {
+      showToast("Compare branch and base branch must be different.");
+      return;
     }
 
     // Trigger Phase 2 transition choreography (Form Shift & Shrink + Poster Reveal)
@@ -215,6 +221,25 @@ function App() {
             </button>
           </div>
 
+        <div className={`w-full bg-black/40 backdrop-blur-2xl border border-white/20 rounded-3xl p-8 shadow-[0_8px_32px_rgba(255,255,255,0.05)] flex flex-col shrink-0 transition-all duration-700 ease-in-out ${isExpanded ? 'max-w-md md:mr-4' : 'max-w-xl'}`}>
+          <div className="mb-6 flex items-center justify-between">
+            <h1 className="text-2xl font-bold text-white flex items-center gap-3 drop-shadow-md">
+              <Code className="w-7 h-7 text-white" />
+              UpToDate
+            </h1>
+            {isExpanded && (
+              <span className="text-xs font-mono bg-white/10 px-2.5 py-1 rounded-full text-white/60 border border-white/10">
+                Split Mode
+              </span>
+            )}
+          </div>
+
+          {isExpanded && (
+            <p className="text-white/60 text-xs mb-6 leading-relaxed">
+              Generate beautiful release posters from your GitHub code diffs using AI.
+            </p>
+          )}
+
           <form onSubmit={handleAnalyze} className="space-y-6 flex-1">
             <div>
               <label className="block text-sm font-medium text-white/80 mb-2">GitHub Repository URL</label>
@@ -223,6 +248,7 @@ function App() {
                 required
                 placeholder="https://github.com/owner/repo"
                 className="w-full bg-black/50 border border-white/20 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:border-white focus:ring-1 focus:ring-white shadow-inner text-white placeholder-white/30 transition-all"
+                className="w-full bg-black/50 border border-white/20 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-white focus:ring-1 focus:ring-white shadow-inner text-white placeholder-white/30 transition-all"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
               />
@@ -259,6 +285,30 @@ function App() {
                 </div>
               </div>
             )}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-white/80 mb-2">Base Branch</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="main"
+                  className="w-full bg-black/50 border border-white/20 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-white focus:ring-1 focus:ring-white shadow-inner text-white placeholder-white/30 transition-all"
+                  value={baseBranch}
+                  onChange={(e) => setBaseBranch(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-white/80 mb-2">Compare Branch</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="develop"
+                  className="w-full bg-black/50 border border-white/20 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-white focus:ring-1 focus:ring-white shadow-inner text-white placeholder-white/30 transition-all"
+                  value={compareBranch}
+                  onChange={(e) => setCompareBranch(e.target.value)}
+                />
+              </div>
+            </div>
 
             <button 
               type="submit" 

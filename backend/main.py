@@ -60,6 +60,16 @@ def parse_github_url(url: str):
     match = re.search(r"github\.com[:/]([^/]+)/([^/\s?#]+)", cleaned_url)
     if not match:
         raise ValueError("Invalid GitHub URL format.")
+class AnalyzeRequest(BaseModel):
+    url: str
+    base_branch: str
+    compare_branch: str
+
+def extract_owner_repo(github_url: str):
+    cleaned_url = github_url.strip()
+    match = re.search(r"github\.com[:/]([^/]+)/([^/\s?#]+)", cleaned_url)
+    if not match:
+        raise ValueError("The URL of the Repository is not valid. Please enter a valid Repository URL.")
     
     owner = match.group(1)
     repo = match.group(2)
@@ -119,6 +129,18 @@ async def analyze_github(request: GitHubRequest):
     head_b = head_b.strip() if head_b and head_b.strip() else None
 
     # Base headers for GitHub API calls
+    base = request.base_branch.strip()
+    compare = request.compare_branch.strip()
+    
+    if not base or not compare:
+        raise HTTPException(status_code=400, detail="Base branch and compare branch must not be empty.")
+        
+    if base.lower() == compare.lower():
+        raise HTTPException(status_code=400, detail="Compare branch and base branch must be different.")
+    
+    # Format comparison endpoint
+    diff_url = f"https://api.github.com/repos/{owner}/{repo}/compare/{base}...{compare}"
+    
     headers = {
         "Accept": "application/vnd.github.v3+json",
         "X-GitHub-Api-Version": "2022-11-28",
@@ -165,6 +187,9 @@ async def analyze_github(request: GitHubRequest):
         
         app_logo_b64 = await fetch_app_logo_base64(client, owner, repo, ref_for_logo)
         response = await client.get(compare_url, headers=diff_headers)
+        # Fetch repository application logo or fallback to owner avatar
+        app_logo_b64 = await fetch_app_logo_base64(client, owner, repo, compare)
+        response = await client.get(diff_url, headers=headers)
         
         if response.status_code == 404:
             raise HTTPException(
@@ -188,6 +213,7 @@ async def analyze_github(request: GitHubRequest):
                     "app_repo": repo,
                     "app_avatar": app_logo_b64 or f"https://github.com/{owner}.png",
                     "message": f"No release poster needed as the contents of both references ('{base_ref}' and '{head_ref}') are identical."
+                    "message": f"No release poster needed as the contents of both branches ('{base}' and '{compare}') are identical."
                 }
             )
         
@@ -203,6 +229,7 @@ async def analyze_github(request: GitHubRequest):
 Act as a technical marketer and UI designer. Review this git diff.
 1. Extract the top 3-4 major user-facing features, architectural improvements, or significant bug fixes into engaging marketing bullet points.
 2. Infer the official or clean Application Name (e.g., 'Kiro' or 'FaceBook' or 'Instagram' etc).
+2. Infer the official or clean Application Name (e.g., 'Semester GPA Calculator' or 'FaceBook' or 'Instagram' etc).
 3. Analyze the diff to infer the visual branding/theme of the project (e.g. color accents, theme vibe like 'Neon Emerald', 'Deep Cobalt Blue', 'Cyber Violet', 'Amber Sunset', 'Rose Quartz', 'Glassmorphism Dark').
    Provide hex colors: `primary_color` (accent hex e.g. #10B981 or #3B82F6), `secondary_color` (complementary gradient hex e.g. #06B6D4 or #8B5CF6).
 
