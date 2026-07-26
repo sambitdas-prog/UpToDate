@@ -90,7 +90,7 @@ export async function shareToPlatform(platform, { dataUrl, posterData, repoUrl, 
   // On Desktop: Open intent URL immediately so popup blockers never interfere
   const intentUrl = getPlatformIntentUrl(platform, caption, targetUrl);
   if (intentUrl && !skipOpen) {
-    const newWin = window.open(intentUrl, '_blank', 'noopener,noreferrer');
+    const newWin = window.open(intentUrl, '_blank');
     // If popup blocker blocked the window.open call on production domains, fallback to direct location assign
     if (!newWin || newWin.closed || typeof newWin.closed === 'undefined') {
       window.location.assign(intentUrl);
@@ -100,7 +100,7 @@ export async function shareToPlatform(platform, { dataUrl, posterData, repoUrl, 
   // Fallback: Copy image and text to clipboard, show toast
   await copyToClipboard(caption, imageFile);
   if (onToast) {
-    onToast('Image and text copied to clipboard! Paste it in your post.');
+    onToast('Poster graphic copied to clipboard! Press Ctrl + V to attach it in your post.');
   }
 }
 
@@ -109,20 +109,21 @@ export async function shareToPlatform(platform, { dataUrl, posterData, repoUrl, 
  */
 async function copyToClipboard(text, imageFile) {
   try {
+    // 1. Prioritize copying the PNG poster graphic to clipboard
+    // Since social platforms pre-fill caption text from the intent URL (?text=...),
+    // Ctrl+V should attach the poster graphic!
     if (navigator.clipboard && navigator.clipboard.write && imageFile) {
       try {
-        const textBlob = new Blob([text], { type: 'text/plain' });
-        const itemData = {
-          'text/plain': textBlob,
-          [imageFile.type]: imageFile,
-        };
-        await navigator.clipboard.write([new ClipboardItem(itemData)]);
+        const imageBlob = imageFile.slice(0, imageFile.size, 'image/png');
+        const item = new ClipboardItem({ 'image/png': imageBlob });
+        await navigator.clipboard.write([item]);
         return;
-      } catch (err) {
-        // Multi-type write failed, fall through to text only
+      } catch (imgErr) {
+        console.warn('Image clipboard copy failed, falling back to text:', imgErr);
       }
     }
-    if (navigator.clipboard && navigator.clipboard.writeText) {
+    // 2. Fallback to text copy if image copy is unavailable
+    if (navigator.clipboard && navigator.clipboard.writeText && text) {
       await navigator.clipboard.writeText(text);
     }
   } catch (err) {

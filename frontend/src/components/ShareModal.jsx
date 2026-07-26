@@ -98,7 +98,7 @@ export default function ShareModal({
 
     // Synchronous window.open in physical user click event cannot be blocked by popup blockers
     if (intentUrl) {
-      const newWin = window.open(intentUrl, '_blank', 'noopener,noreferrer');
+      const newWin = window.open(intentUrl, '_blank');
       if (!newWin || newWin.closed || typeof newWin.closed === 'undefined') {
         window.location.assign(intentUrl);
       }
