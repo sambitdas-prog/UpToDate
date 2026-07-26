@@ -142,7 +142,7 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white relative overflow-hidden overflow-x-hidden font-sans flex flex-col items-center justify-center p-4 md:p-8 transition-all duration-700">
+    <div className="min-h-screen bg-black text-white relative overflow-x-hidden font-sans flex flex-col justify-between transition-all duration-700">
       {/* Top-Left Home Button (Only visible in Split View) */}
       {isExpanded && (
         <button
@@ -194,7 +194,8 @@ function App() {
       <div className="absolute bottom-1/4 right-1/4 w-[600px] h-[600px] bg-white/5 rounded-full blur-[128px] pointer-events-none animate-pulse" style={{ animationDuration: '8s', animationDelay: '1s' }}></div>
 
       {/* Main Container Area (Transitions between Split Screen Layouts) */}
-      <div className={`w-full max-w-7xl flex flex-col md:flex-row items-center justify-center gap-10 md:gap-16 relative z-10 transition-all duration-700 ease-in-out px-4`}>
+      <main className="w-full min-h-screen flex items-center justify-center p-4 md:p-8 relative z-10">
+        <div className={`w-full max-w-7xl flex flex-col md:flex-row items-center justify-center gap-10 md:gap-16 relative z-10 transition-all duration-700 ease-in-out px-4`}>
         
         {/* Phase 1: Hero Section (Visible in Initial State, Left Side) */}
         {!isExpanded && (
@@ -360,9 +361,10 @@ function App() {
           </div>
         )}
       </div>
+      </main>
 
       {/* Footer underneath, center aligned */}
-      <footer className="w-full max-w-4xl relative z-10 mt-20 pt-8 pb-6 border-t border-white/10 text-center flex flex-col items-center justify-center gap-4 text-white/60 animate-fade-in">
+      <footer className="w-full max-w-4xl mx-auto relative z-10 pt-8 pb-10 border-t border-white/10 text-center flex flex-col items-center justify-center gap-4 text-white/60 animate-fade-in">
         <div className="flex items-center justify-center gap-2 text-white font-bold text-lg tracking-tight">
           <Code className="w-5 h-5 text-purple-400" />
           <span>UpToDate</span>
