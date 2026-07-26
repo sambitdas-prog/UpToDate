@@ -91,17 +91,18 @@ export default function ShareModal({
     }
   };
 
-  const handleContinueClick = (platform) => {
+  const handleContinueClick = async (platform) => {
+    // 1. First: Copy image to clipboard while current document is 100% focused
+    await handleConfirmShare(platform, true);
+
+    // 2. Second: Open new platform tab after clipboard copy completes
     const targetUrl = repoUrl || (posterData?.app_repo ? `https://github.com/${posterData.app_repo}` : 'https://github.com');
     const caption = generateShareCaption(posterData, repoUrl);
     const intentUrl = getPlatformIntentUrl(platform, caption, targetUrl);
 
-    // Native transient anchor click opens a brand new tab and cannot be blocked by popup blockers
     if (intentUrl) {
       openInNewTab(intentUrl);
     }
-
-    handleConfirmShare(platform, true);
   };
 
   const handleCloseModal = () => {

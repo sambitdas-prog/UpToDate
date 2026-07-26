@@ -87,16 +87,16 @@ export async function shareToPlatform(platform, { dataUrl, posterData, repoUrl, 
     }
   }
 
-  // On Desktop: Open intent URL immediately via native link click so popup blockers never interfere
-  const intentUrl = getPlatformIntentUrl(platform, caption, targetUrl);
-  if (intentUrl && !skipOpen) {
-    openInNewTab(intentUrl);
-  }
-
-  // Fallback: Copy image and text to clipboard, show toast
+  // 1. First: Copy image to clipboard while the current tab has 100% document focus
   await copyToClipboard(caption, dataUrl, imageFile);
   if (onToast) {
     onToast('Poster graphic copied to clipboard! Press Ctrl + V to attach it in your post.');
+  }
+
+  // 2. Second: Open intent URL via native link click after clipboard copy completes
+  const intentUrl = getPlatformIntentUrl(platform, caption, targetUrl);
+  if (intentUrl && !skipOpen) {
+    openInNewTab(intentUrl);
   }
 }
 
@@ -139,11 +139,11 @@ async function copyToClipboard(text, dataUrl, imageFile) {
           return;
         }
       } catch (imgErr) {
-        console.warn('Image clipboard copy failed, falling back to text:', imgErr);
+        console.warn('Image clipboard copy failed:', imgErr);
       }
     }
-    // 2. Fallback to text copy if image copy is unavailable
-    if (navigator.clipboard && navigator.clipboard.writeText && text) {
+    // 2. Fallback to text copy ONLY if no image was provided
+    if (navigator.clipboard && navigator.clipboard.writeText && text && !dataUrl && !imageFile) {
       await navigator.clipboard.writeText(text);
     }
   } catch (err) {
