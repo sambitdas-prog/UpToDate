@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader2, AlertTriangle, ArrowRight } from 'lucide-react';
-import { shareToPlatform, getPlatformIntentUrl, generateShareCaption } from '../utils/shareUtils';
+import { shareToPlatform, getPlatformIntentUrl, generateShareCaption, openInNewTab } from '../utils/shareUtils';
 
 const WhatsappIcon = ({ className }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor">
@@ -96,12 +96,9 @@ export default function ShareModal({
     const caption = generateShareCaption(posterData, repoUrl);
     const intentUrl = getPlatformIntentUrl(platform, caption, targetUrl);
 
-    // Synchronous window.open in physical user click event cannot be blocked by popup blockers
+    // Native transient anchor click opens a brand new tab and cannot be blocked by popup blockers
     if (intentUrl) {
-      const newWin = window.open(intentUrl, '_blank');
-      if (!newWin || newWin.closed || typeof newWin.closed === 'undefined') {
-        window.location.assign(intentUrl);
-      }
+      openInNewTab(intentUrl);
     }
 
     handleConfirmShare(platform, true);

@@ -87,37 +87,57 @@ export async function shareToPlatform(platform, { dataUrl, posterData, repoUrl, 
     }
   }
 
-  // On Desktop: Open intent URL immediately so popup blockers never interfere
+  // On Desktop: Open intent URL immediately via native link click so popup blockers never interfere
   const intentUrl = getPlatformIntentUrl(platform, caption, targetUrl);
   if (intentUrl && !skipOpen) {
-    const newWin = window.open(intentUrl, '_blank');
-    // If popup blocker blocked the window.open call on production domains, fallback to direct location assign
-    if (!newWin || newWin.closed || typeof newWin.closed === 'undefined') {
-      window.location.assign(intentUrl);
-    }
+    openInNewTab(intentUrl);
   }
 
   // Fallback: Copy image and text to clipboard, show toast
-  await copyToClipboard(caption, imageFile);
+  await copyToClipboard(caption, dataUrl, imageFile);
   if (onToast) {
     onToast('Poster graphic copied to clipboard! Press Ctrl + V to attach it in your post.');
   }
 }
 
 /**
+ * Safely opens a URL in a new tab using a transient HTML anchor element click.
+ * This prevents modern browser security rules on production domains from treating it as a popup or redirecting the current tab.
+ */
+export function openInNewTab(url) {
+  if (!url) return;
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+/**
  * Helper to write caption and/or image to clipboard.
  */
-async function copyToClipboard(text, imageFile) {
+async function copyToClipboard(text, dataUrl, imageFile) {
   try {
     // 1. Prioritize copying the PNG poster graphic to clipboard
     // Since social platforms pre-fill caption text from the intent URL (?text=...),
     // Ctrl+V should attach the poster graphic!
-    if (navigator.clipboard && navigator.clipboard.write && imageFile) {
+    if (navigator.clipboard && navigator.clipboard.write && (dataUrl || imageFile)) {
       try {
-        const imageBlob = imageFile.slice(0, imageFile.size, 'image/png');
-        const item = new ClipboardItem({ 'image/png': imageBlob });
-        await navigator.clipboard.write([item]);
-        return;
+        let imageBlob = null;
+        if (dataUrl && typeof dataUrl === 'string' && dataUrl.startsWith('data:image')) {
+          const res = await fetch(dataUrl);
+          imageBlob = await res.blob();
+        } else if (imageFile) {
+          imageBlob = imageFile.slice(0, imageFile.size, 'image/png');
+        }
+
+        if (imageBlob) {
+          const item = new ClipboardItem({ [imageBlob.type || 'image/png']: imageBlob });
+          await navigator.clipboard.write([item]);
+          return;
+        }
       } catch (imgErr) {
         console.warn('Image clipboard copy failed, falling back to text:', imgErr);
       }
