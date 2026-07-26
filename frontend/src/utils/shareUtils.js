@@ -65,7 +65,7 @@ function isMobileDevice() {
 /**
  * Handles sharing to a target social platform using navigator.share on mobile or immediate web intent URL + clipboard copy on desktop.
  */
-export async function shareToPlatform(platform, { dataUrl, posterData, repoUrl, onToast }) {
+export async function shareToPlatform(platform, { dataUrl, posterData, repoUrl, onToast, skipOpen }) {
   const caption = generateShareCaption(posterData, repoUrl);
   const imageFile = dataUrl ? dataUrlToFile(dataUrl) : null;
   const targetUrl = repoUrl || (posterData?.app_repo ? `https://github.com/${posterData.app_repo}` : 'https://github.com');
@@ -89,8 +89,12 @@ export async function shareToPlatform(platform, { dataUrl, posterData, repoUrl, 
 
   // On Desktop: Open intent URL immediately so popup blockers never interfere
   const intentUrl = getPlatformIntentUrl(platform, caption, targetUrl);
-  if (intentUrl) {
-    window.open(intentUrl, '_blank', 'noopener,noreferrer');
+  if (intentUrl && !skipOpen) {
+    const newWin = window.open(intentUrl, '_blank', 'noopener,noreferrer');
+    // If popup blocker blocked the window.open call on production domains, fallback to direct location assign
+    if (!newWin || newWin.closed || typeof newWin.closed === 'undefined') {
+      window.location.assign(intentUrl);
+    }
   }
 
   // Fallback: Copy image and text to clipboard, show toast
@@ -129,9 +133,9 @@ async function copyToClipboard(text, imageFile) {
 /**
  * Returns the web intent URL for a given social platform.
  */
-function getPlatformIntentUrl(platform, caption, targetUrl) {
-  const encodedCaption = encodeURIComponent(caption);
-  const encodedUrl = encodeURIComponent(targetUrl);
+export function getPlatformIntentUrl(platform, caption, targetUrl) {
+  const encodedCaption = encodeURIComponent(caption || '');
+  const encodedUrl = encodeURIComponent(targetUrl || 'https://github.com');
 
   switch (platform) {
     case 'whatsapp':

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader2, AlertTriangle, ArrowRight } from 'lucide-react';
-import { shareToPlatform } from '../utils/shareUtils';
+import { shareToPlatform, getPlatformIntentUrl, generateShareCaption } from '../utils/shareUtils';
 
 const WhatsappIcon = ({ className }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor">
@@ -70,7 +70,7 @@ export default function ShareModal({
     setPendingPlatform(platform);
   };
 
-  const handleConfirmShare = async (platform) => {
+  const handleConfirmShare = async (platform, isLinkClick = false) => {
     setSharingPlatform(platform);
     try {
       await shareToPlatform(platform, {
@@ -78,6 +78,7 @@ export default function ShareModal({
         posterData,
         repoUrl,
         onToast,
+        skipOpen: isLinkClick,
       });
     } catch (err) {
       console.error(`Failed sharing to ${platform}:`, err);
@@ -156,24 +157,35 @@ export default function ShareModal({
                 >
                   Cancel
                 </button>
-                <button
-                  type="button"
-                  disabled={countdown > 0 || sharingPlatform}
-                  onClick={() => handleConfirmShare(pendingPlatform)}
-                  className="px-5 py-2.5 rounded-xl font-semibold text-sm transition-all flex items-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed bg-white text-black hover:bg-white/90"
-                >
-                  {countdown > 0 ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                      <span>Continue in {countdown}s...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>Continue to {platformNames[pendingPlatform]}</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </>
-                  )}
-                </button>
+                {countdown > 0 ? (
+                  <button
+                    type="button"
+                    disabled
+                    className="px-5 py-2.5 rounded-xl font-semibold text-sm transition-all flex items-center gap-2 shadow-lg opacity-50 cursor-not-allowed bg-white text-black"
+                  >
+                    <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                    <span>Continue in {countdown}s...</span>
+                  </button>
+                ) : (
+                  <a
+                    href={
+                      pendingPlatform
+                        ? getPlatformIntentUrl(
+                            pendingPlatform,
+                            generateShareCaption(posterData, repoUrl),
+                            repoUrl || (posterData?.app_repo ? `https://github.com/${posterData.app_repo}` : 'https://github.com')
+                          ) || '#'
+                        : '#'
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => handleConfirmShare(pendingPlatform, true)}
+                    className="px-5 py-2.5 rounded-xl font-semibold text-sm transition-all flex items-center gap-2 shadow-lg bg-white text-black hover:bg-white/90 cursor-pointer"
+                  >
+                    <span>Continue to {platformNames[pendingPlatform]}</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </a>
+                )}
               </div>
             </div>
           </div>
