@@ -392,7 +392,7 @@ function App() {
             <GithubIcon className="w-5 h-5" />
           </a>
           <a
-            href="https://www.linkedin.com"
+            href="https://www.linkedin.com/in/sambit-das-806101382"
             target="_blank"
             rel="noopener noreferrer"
             className="text-white/50 hover:text-white hover:scale-110 transition-all"
@@ -401,7 +401,7 @@ function App() {
             <LinkedinIcon className="w-5 h-5" />
           </a>
           <a
-            href="https://www.facebook.com"
+            href="https://www.facebook.com/sambitdas244"
             target="_blank"
             rel="noopener noreferrer"
             className="text-white/50 hover:text-white hover:scale-110 transition-all"
@@ -410,7 +410,7 @@ function App() {
             <FacebookIcon className="w-5 h-5" />
           </a>
           <a
-            href="https://www.instagram.com"
+            href="https://www.instagram.com/somebitsss"
             target="_blank"
             rel="noopener noreferrer"
             className="text-white/50 hover:text-white hover:scale-110 transition-all"
