@@ -1,8 +1,9 @@
 import { useState, useRef } from 'react';
 import { toPng } from 'html-to-image';
-import { Download, Loader2, Code, AlertTriangle, X, Sparkles, Zap, GitCompare, Upload } from 'lucide-react';
+import { Download, Loader2, Code, AlertTriangle, X, Sparkles, Zap, GitCompare, Upload, Share2 } from 'lucide-react';
 import Poster from './components/Poster';
 import LoadingPoster from './components/LoadingPoster';
+import ShareModal from './components/ShareModal';
 
 const GithubIcon = ({ className }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
@@ -28,6 +29,10 @@ function App() {
   const [posterData, setPosterData] = useState(null);
   const [toast, setToast] = useState({ visible: false, message: '' });
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [shareImageUrl, setShareImageUrl] = useState('');
+  const [isGeneratingShareImage, setIsGeneratingShareImage] = useState(false);
+  const [shareToastMessage, setShareToastMessage] = useState('');
   
   const posterRef = useRef(null);
 
@@ -138,6 +143,32 @@ function App() {
         console.error('Failed to download image', err);
         setError(`Failed to generate image download: ${err?.message || 'Rendering error'}`);
       }
+    }
+  };
+
+  const showShareToast = (msg) => {
+    setShareToastMessage(msg);
+    setTimeout(() => {
+      setShareToastMessage('');
+    }, 4500);
+  };
+
+  const handleOpenShareModal = async () => {
+    if (!posterRef.current || !posterData || posterData.no_diff) return;
+    setIsGeneratingShareImage(true);
+    setIsShareModalOpen(true);
+    try {
+      const dataUrl = await toPng(posterRef.current, {
+        quality: 0.95,
+        pixelRatio: 2,
+        cacheBust: true,
+      });
+      setShareImageUrl(dataUrl);
+    } catch (err) {
+      console.error('Failed to generate share image', err);
+      showShareToast('Failed to generate preview image for sharing');
+    } finally {
+      setIsGeneratingShareImage(false);
     }
   };
 
@@ -335,14 +366,23 @@ function App() {
           </form>
 
           {posterData && !posterData.no_diff && isExpanded && (
-            <div className="mt-8 pt-8 border-t border-white/10 animate-fade-in">
+            <div className="mt-8 pt-8 border-t border-white/10 animate-fade-in grid grid-cols-4 gap-3">
               <button 
                 onClick={handleDownload}
                 disabled={loading}
-                className="w-full bg-transparent border border-white hover:bg-white hover:text-black text-white font-semibold py-3.5 rounded-xl shadow-[0_4px_20px_rgba(255,255,255,0.1)] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="col-span-3 bg-transparent border border-white hover:bg-white hover:text-black text-white font-semibold py-3.5 rounded-xl shadow-[0_4px_20px_rgba(255,255,255,0.1)] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 <Download className="w-5 h-5" />
-                Download Poster (PNG)
+                <span>Download Poster (PNG)</span>
+              </button>
+              <button 
+                onClick={handleOpenShareModal}
+                disabled={loading}
+                className="col-span-1 bg-transparent border border-white hover:bg-white hover:text-black text-white font-semibold py-3.5 px-3 rounded-xl shadow-[0_4px_20px_rgba(255,255,255,0.1)] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                title="Share Release Update"
+              >
+                <Share2 className="w-5 h-5" />
+                <span>Share</span>
               </button>
             </div>
           )}
@@ -366,7 +406,7 @@ function App() {
       {/* Footer underneath, center aligned */}
       <footer className="w-full max-w-4xl mx-auto relative z-10 pt-8 pb-10 border-t border-white/10 text-center flex flex-col items-center justify-center gap-4 text-white/60 animate-fade-in">
         <div className="flex items-center justify-center gap-2 text-white font-bold text-lg tracking-tight">
-          <Code className="w-5 h-5 text-purple-400" />
+          <Code className="w-5 h-5 text-white" />
           <span>UpToDate</span>
         </div>
 
@@ -420,6 +460,24 @@ function App() {
           </a>
         </div>
       </footer>
+
+      {/* Share Toast Notification */}
+      {shareToastMessage && (
+        <div className="fixed bottom-6 right-6 z-[60] bg-white text-black font-semibold text-sm px-5 py-3 rounded-xl shadow-[0_10px_30px_rgba(255,255,255,0.2)] border border-white animate-fade-in flex items-center gap-2">
+          <span>{shareToastMessage}</span>
+        </div>
+      )}
+
+      {/* Share Modal */}
+      <ShareModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        shareImageUrl={shareImageUrl}
+        isGenerating={isGeneratingShareImage}
+        posterData={posterData}
+        repoUrl={url}
+        onToast={showShareToast}
+      />
     </div>
   );
 }
