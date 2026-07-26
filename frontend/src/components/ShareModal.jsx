@@ -91,6 +91,22 @@ export default function ShareModal({
     }
   };
 
+  const handleContinueClick = (platform) => {
+    const targetUrl = repoUrl || (posterData?.app_repo ? `https://github.com/${posterData.app_repo}` : 'https://github.com');
+    const caption = generateShareCaption(posterData, repoUrl);
+    const intentUrl = getPlatformIntentUrl(platform, caption, targetUrl);
+
+    // Synchronous window.open in physical user click event cannot be blocked by popup blockers
+    if (intentUrl) {
+      const newWin = window.open(intentUrl, '_blank', 'noopener,noreferrer');
+      if (!newWin || newWin.closed || typeof newWin.closed === 'undefined') {
+        window.location.assign(intentUrl);
+      }
+    }
+
+    handleConfirmShare(platform, true);
+  };
+
   const handleCloseModal = () => {
     setPendingPlatform(null);
     setSharingPlatform(null);
@@ -167,24 +183,14 @@ export default function ShareModal({
                     <span>Continue in {countdown}s...</span>
                   </button>
                 ) : (
-                  <a
-                    href={
-                      pendingPlatform
-                        ? getPlatformIntentUrl(
-                            pendingPlatform,
-                            generateShareCaption(posterData, repoUrl),
-                            repoUrl || (posterData?.app_repo ? `https://github.com/${posterData.app_repo}` : 'https://github.com')
-                          ) || '#'
-                        : '#'
-                    }
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => handleConfirmShare(pendingPlatform, true)}
+                  <button
+                    type="button"
+                    onClick={() => handleContinueClick(pendingPlatform)}
                     className="px-5 py-2.5 rounded-xl font-semibold text-sm transition-all flex items-center gap-2 shadow-lg bg-white text-black hover:bg-white/90 cursor-pointer"
                   >
                     <span>Continue to {platformNames[pendingPlatform]}</span>
                     <ArrowRight className="w-4 h-4" />
-                  </a>
+                  </button>
                 )}
               </div>
             </div>
