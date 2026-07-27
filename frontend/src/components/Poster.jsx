@@ -23,6 +23,11 @@ const hexToRgba = (hex, alpha) => {
 
 const Poster = React.forwardRef(({ data }, ref) => {
   const [brandColors, setBrandColors] = useState(['#3B82F6', '#8B5CF6', '#14B8A6', '#F59E0B']);
+  const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [data?.app_avatar]);
 
   useEffect(() => {
     const sourceUrl = data?.heroImageUrl || data?.app_avatar;
@@ -98,13 +103,23 @@ const Poster = React.forwardRef(({ data }, ref) => {
         </div>
         <h3 className="text-2xl font-bold text-white mb-3 tracking-tight relative z-10">Branches are Identical</h3>
         <p className="text-white/60 text-lg max-w-md leading-relaxed relative z-10">
-          No release poster needed as the contents of both branches are identical.
+          The selected references have no differences. No release poster is needed for identical branches.
         </p>
       </div>
     );
   }
 
-  const appName = data.app_name || 'Application Update';
+  const formatAppName = (name, repo) => {
+    if (name && typeof name === 'string' && !['app', 'application', 'unknown', 'untitled', 'release update', 'git diff', 'update', 'release', 'aether'].includes(name.trim().toLowerCase())) {
+      return name.trim();
+    }
+    if (repo && typeof repo === 'string') {
+      return repo.replace(/[-_]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    }
+    return 'Application Update';
+  };
+
+  const appName = formatAppName(data.app_name, data.app_repo);
   const avatarUrl = data.app_avatar;
   const features = data.features || [];
 
@@ -147,13 +162,13 @@ const Poster = React.forwardRef(({ data }, ref) => {
       {/* Header Bar */}
       <div className="relative z-10 flex items-center justify-between gap-4 mb-8">
         <div className="flex items-center gap-3 bg-white/[0.06] border border-white/10 px-4 py-2.5 rounded-2xl shadow-xl">
-          {avatarUrl ? (
+          {avatarUrl && !imgError ? (
             <img 
               src={avatarUrl} 
               alt={appName} 
-              crossOrigin="anonymous"
-              className="w-8 h-8 rounded-xl object-cover border border-white/20 shadow-sm bg-white"
-              onError={(e) => { e.target.style.display = 'none'; }}
+              crossOrigin={avatarUrl.startsWith('data:') ? undefined : 'anonymous'}
+              className="w-8 h-8 rounded-xl object-contain border border-white/20 shadow-sm bg-white p-0.5"
+              onError={() => setImgError(true)}
             />
           ) : (
             <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center border border-white/20">

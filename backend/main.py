@@ -70,37 +70,176 @@ def parse_github_url(url: str):
 extract_owner_repo = parse_github_url
 
 async def fetch_avatar_base64(client: httpx.AsyncClient, owner: str) -> str:
-    url = f"https://github.com/{owner}.png"
-    try:
-        res = await client.get(url, follow_redirects=True, timeout=5.0)
-        if res.status_code == 200:
-            mime_type = res.headers.get("content-type", "image/png")
-            encoded = base64.b64encode(res.content).decode("utf-8")
-            return f"data:{mime_type};base64,{encoded}"
-    except Exception as e:
-        print(f"Failed to fetch avatar base64: {e}")
-    return ""
-
-async def fetch_app_logo_base64(client: httpx.AsyncClient, owner: str, repo: str, branch: str) -> str:
-    paths = [
-        "logo.svg", "logo.png", "favicon.png", "favicon.ico", "icon.png", "apple-touch-icon.png",
-        "public/logo.svg", "public/logo.png", "public/favicon.png", "public/favicon.ico", "public/icon.png",
-        "src/assets/logo.svg", "src/assets/logo.png", "assets/logo.svg", "assets/logo.png",
-        "src/logo.svg", "src/logo.png"
+    urls = [
+        f"https://github.com/{owner}.png",
+        f"https://unavatar.io/github/{owner}"
     ]
-    for p in paths:
-        url = f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{p}"
+    for url in urls:
         try:
-            r = await client.get(url, follow_redirects=True, timeout=3.0)
-            if r.status_code == 200 and len(r.content) > 50:
-                mime = "image/svg+xml" if p.endswith(".svg") else ("image/x-icon" if p.endswith(".ico") else "image/png")
-                b64 = base64.b64encode(r.content).decode("utf-8")
-                return f"data:{mime};base64,{b64}"
+            res = await client.get(url, follow_redirects=True, timeout=5.0)
+            if res.status_code == 200 and len(res.content) > 100:
+                mime_type = res.headers.get("content-type", "image/png").split(";")[0].strip()
+                if not mime_type.startswith("image/"):
+                    mime_type = "image/png"
+                encoded = base64.b64encode(res.content).decode("utf-8")
+                return f"data:{mime_type};base64,{encoded}"
+        except Exception as e:
+            print(f"Failed to fetch avatar from {url}: {e}")
+    return f"https://github.com/{owner}.png"
+
+async def fetch_repo_metadata_and_logo(client: httpx.AsyncClient, owner: str, repo: str, branch: str, headers: dict) -> tuple[Optional[str], str]:
+    extracted_app_name = None
+    logo_base64 = None
+    
+    default_branch = "main"
+    try:
+        repo_api_url = f"https://api.github.com/repos/{owner}/{repo}"
+        r_repo = await client.get(repo_api_url, headers=headers, timeout=5.0)
+        if r_repo.status_code == 200:
+            info = r_repo.json()
+            default_branch = info.get("default_branch", "main")
+    except Exception as e:
+        print(f"Repo API check failed: {e}")
+
+    branches_to_check = []
+    for b in [branch, default_branch, "main", "master"]:
+        if b and b not in branches_to_check:
+            branches_to_check.append(b)
+
+    tree_files = []
+    for b in branches_to_check:
+        try:
+            tree_url = f"https://api.github.com/repos/{owner}/{repo}/git/trees/{b}?recursive=1"
+            r_tree = await client.get(tree_url, headers=headers, timeout=5.0)
+            if r_tree.status_code == 200:
+                data = r_tree.json()
+                tree_files = [item.get("path", "") for item in data.get("tree", []) if "path" in item]
+                if tree_files:
+                    break
         except Exception:
             pass
-            
-    # Fallback to owner avatar if no app logo/favicon found in repo
-    return await fetch_avatar_base64(client, owner)
+
+    async def get_raw_file(path: str) -> bytes:
+        for b in branches_to_check:
+            url = f"https://raw.githubusercontent.com/{owner}/{repo}/{b}/{path}"
+            try:
+                r = await client.get(url, follow_redirects=True, timeout=3.0)
+                if r.status_code == 200 and len(r.content) > 10:
+                    return r.content
+            except Exception:
+                pass
+        return b""
+
+    # 1. EXTRACT APPLICATION NAME
+    index_paths = [p for p in tree_files if p.lower().endswith("index.html")] or ["index.html", "public/index.html"]
+    for idx_path in index_paths[:3]:
+        idx_bytes = await get_raw_file(idx_path)
+        if idx_bytes:
+            try:
+                html_text = idx_bytes.decode("utf-8", errors="ignore")
+                title_match = re.search(r"<title[^>]*>(.*?)</title>", html_text, re.IGNORECASE | re.DOTALL)
+                if title_match:
+                    raw_title = title_match.group(1).strip()
+                    clean_title = re.split(r"\s*[-–—|:]\s*", raw_title)[0].strip()
+                    if clean_title and len(clean_title) < 40 and clean_title.lower() not in ["app", "application", "vite app", "react app", "next app", "home", "index", "unknown"]:
+                        extracted_app_name = clean_title
+                        break
+            except Exception:
+                pass
+
+    if not extracted_app_name:
+        pkg_paths = [p for p in tree_files if p.lower().endswith("package.json")] or ["package.json"]
+        for pkg_path in pkg_paths[:2]:
+            pkg_bytes = await get_raw_file(pkg_path)
+            if pkg_bytes:
+                try:
+                    pkg_data = json.loads(pkg_bytes.decode("utf-8", errors="ignore"))
+                    display_name = pkg_data.get("displayName") or pkg_data.get("name")
+                    if display_name and isinstance(display_name, str):
+                        clean_pkg = display_name.replace("-", " ").replace("_", " ").strip().title()
+                        if clean_pkg.lower() not in ["app", "application", "react", "vite", "next", "unknown"]:
+                            extracted_app_name = clean_pkg
+                            break
+                except Exception:
+                    pass
+
+    if not extracted_app_name:
+        readme_paths = [p for p in tree_files if p.lower().endswith("readme.md")] or ["README.md"]
+        for r_path in readme_paths[:2]:
+            readme_bytes = await get_raw_file(r_path)
+            if readme_bytes:
+                try:
+                    readme_text = readme_bytes.decode("utf-8", errors="ignore")
+                    h_match = re.search(r"^#\s+([^\n\r]+)", readme_text, re.MULTILINE)
+                    if h_match:
+                        raw_h = h_match.group(1).strip()
+                        raw_h = re.sub(r"\[.*?\]\(.*?\)", "", raw_h)
+                        raw_h = re.sub(r"[^\w\s\.\'-]", "", raw_h).strip()
+                        clean_h = re.split(r"\s*[-–—|:]\s*", raw_h)[0].strip()
+                        if clean_h and 2 <= len(clean_h) <= 30 and clean_h.lower() not in ["readme", "project", "app", "application"]:
+                            extracted_app_name = clean_h
+                            break
+                except Exception:
+                    pass
+
+    # 2. DISCOVER APPLICATION LOGO / FAVICON
+    logo_candidates = []
+    
+    for idx_path in index_paths[:2]:
+        idx_bytes = await get_raw_file(idx_path)
+        if idx_bytes:
+            try:
+                html_text = idx_bytes.decode("utf-8", errors="ignore")
+                icon_links = re.findall(r'<link[^>]+(?:rel=["\'][^"\']*icon[^"\']*["\'])[^>]+href=["\']([^"\']+)["\']', html_text, re.IGNORECASE)
+                icon_links += re.findall(r'<link[^>]+href=["\']([^"\']+)["\'][^>]+(?:rel=["\'][^"\']*icon[^"\']*["\'])', html_text, re.IGNORECASE)
+                for href in icon_links:
+                    clean_href = href.lstrip("./").lstrip("/")
+                    if clean_href and clean_href not in logo_candidates:
+                        logo_candidates.append(clean_href)
+                        if not clean_href.startswith("public/") and "public/" + clean_href not in logo_candidates:
+                            logo_candidates.append("public/" + clean_href)
+            except Exception:
+                pass
+
+    if tree_files:
+        img_exts = (".svg", ".png", ".ico", ".webp", ".jpg", ".jpeg")
+        for f in tree_files:
+            lower_f = f.lower()
+            if lower_f.endswith(img_exts):
+                if any(k in lower_f for k in ["logo", "favicon", "icon", "brand", "vite.svg", "react.svg"]):
+                    if f not in logo_candidates:
+                        logo_candidates.append(f)
+
+    standard_paths = [
+        "logo.svg", "logo.png", "favicon.png", "favicon.ico", "icon.png", "apple-touch-icon.png",
+        "public/logo.svg", "public/logo.png", "public/favicon.png", "public/favicon.ico", "public/icon.png",
+        "public/favicon.svg", "public/logo.ico", "public/images/logo.png", "public/images/logo.svg",
+        "public/vite.svg", "vite.svg", "src/assets/logo.svg", "src/assets/logo.png",
+        "src/assets/favicon.png", "src/assets/favicon.ico", "assets/logo.svg", "assets/logo.png",
+        "src/logo.svg", "src/logo.png", "src/favicon.ico", "src/favicon.png",
+        "app/favicon.ico", "app/icon.png", "app/favicon.png",
+        "static/logo.png", "static/logo.svg", "static/favicon.ico", "static/favicon.png"
+    ]
+    for p in standard_paths:
+        if p not in logo_candidates:
+            logo_candidates.append(p)
+
+    for path in logo_candidates:
+        content = await get_raw_file(path)
+        if content and len(content) > 50:
+            lower_path = path.lower()
+            mime = "image/svg+xml" if lower_path.endswith(".svg") else (
+                   "image/x-icon" if lower_path.endswith(".ico") else (
+                   "image/webp" if lower_path.endswith(".webp") else (
+                   "image/jpeg" if lower_path.endswith((".jpg", ".jpeg")) else "image/png")))
+            b64 = base64.b64encode(content).decode("utf-8")
+            logo_base64 = f"data:{mime};base64,{b64}"
+            break
+
+    if not logo_base64:
+        logo_base64 = await fetch_avatar_base64(client, owner)
+
+    return extracted_app_name, logo_base64
 
 @app.post("/api/analyze")
 @app.post("/api/v1/analyze-github")
@@ -163,7 +302,7 @@ async def analyze_github(request: GitHubRequest):
         diff_headers = headers.copy()
         diff_headers["Accept"] = "application/vnd.github.v3.diff" # Crucial for raw diff
         
-        app_logo_b64 = await fetch_app_logo_base64(client, owner, repo, ref_for_logo)
+        extracted_app_name, app_logo_b64 = await fetch_repo_metadata_and_logo(client, owner, repo, ref_for_logo, headers)
         response = await client.get(compare_url, headers=diff_headers)
         
         if response.status_code == 404:
@@ -183,7 +322,7 @@ async def analyze_github(request: GitHubRequest):
                 status_code=200,
                 content={
                     "no_diff": True,
-                    "app_name": repo.replace("-", " ").replace("_", " ").title(),
+                    "app_name": extracted_app_name or repo.replace("-", " ").replace("_", " ").title(),
                     "app_owner": owner,
                     "app_repo": repo,
                     "app_avatar": app_logo_b64 or f"https://github.com/{owner}.png",
@@ -200,22 +339,23 @@ async def analyze_github(request: GitHubRequest):
             
         # Call Gemini
         prompt = f"""
-Act as a technical marketer and UI designer. Review this git diff.
+Act as a product marketer and UI designer. Review this git diff for repository '{owner}/{repo}'.
 1. Extract the top 3-4 major user-facing features, architectural improvements, or significant bug fixes into engaging marketing feature cards.
-2. Infer the official or clean Application Name (e.g., 'Kiro' or 'FaceBook' or 'Instagram' etc).
+2. Determine the official Application Name. The actual application name extracted from the repository is '{extracted_app_name or repo.replace("-", " ").replace("_", " ").title()}'. You MUST output "{extracted_app_name or repo.replace("-", " ").replace("_", " ").title()}" as "app_name". Do NOT invent, guess, or hallucinate any other name (such as 'Aether', 'App', etc.).
+3. VERY IMPORTANT: Write all feature titles and descriptions in PLAIN, SIMPLE, CLEAR ENGLISH. Do not use hard English, complex vocabulary, technical jargon, or corporate buzzwords. Explain what changed in simple everyday terms so that anyone can easily understand it at a glance.
 
 Enforce this strict JSON output schema:
 {{
-  "app_name": "Clean formatted name of the application",
-  "headline": "A short, extremely punchy title (max 5 words).",
-  "subheadline": "A slightly longer, descriptive subtitle.",
-  "summary": "A 2-3 sentence engaging overview of the update.",
-  "theme_keyword": "A single word (e.g., 'speed', 'ui', 'security').",
+  "app_name": "Clean human-readable name of the application (e.g. UpToDate)",
+  "headline": "A short, extremely punchy title in simple English (max 5 words).",
+  "subheadline": "A slightly longer, clear subtitle in plain English.",
+  "summary": "A 2-3 sentence engaging overview of the update written in simple, easy-to-understand plain English.",
+  "theme_keyword": "A single simple word (e.g., 'speed', 'ui', 'security').",
   "features": [
     {{
       "category": "Major Feature | Polish | Fix",
-      "title": "Action-oriented feature name",
-      "description": "Detailed 1-2 sentence explanation of the impact.",
+      "title": "Clear, simple feature name in plain English",
+      "description": "1-2 simple sentences explaining the update in easy-to-understand plain English without hard technical jargon.",
       "icon_hint": "name of a standard icon (e.g., 'zap', 'shield', 'eye', 'tool', 'bug')"
     }}
   ]
@@ -243,8 +383,14 @@ Here is the diff:
                 except Exception:
                     data = {}
 
-                if not data.get("app_name"):
-                    data["app_name"] = repo.replace("-", " ").replace("_", " ").title()
+                clean_repo_title = repo.replace("-", " ").replace("_", " ").title()
+                if extracted_app_name:
+                    data["app_name"] = extracted_app_name
+                elif (not data.get("app_name") or 
+                    not isinstance(data.get("app_name"), str) or 
+                    data["app_name"].strip() == "" or 
+                    data["app_name"].strip().lower() in ["app", "application", "unknown", "untitled", "release update", "git diff", "release", "update", "aether"]):
+                    data["app_name"] = clean_repo_title
                 
                 if not data.get("headline"):
                     data["headline"] = "Release Update"
