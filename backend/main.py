@@ -319,8 +319,6 @@ async def analyze_github(request: GitHubRequest):
 
             base_ref = base_b
             head_ref = head_b
-            if "/" in head_ref and ":" not in head_ref:
-                head_ref = head_ref.replace("/", ":", 1)
             ref_for_logo = head_ref
 
         # Format comparison endpoint
