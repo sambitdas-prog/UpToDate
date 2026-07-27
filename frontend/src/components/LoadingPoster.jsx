@@ -4,7 +4,7 @@ import { GitCompare, Sparkles, Wand2, Loader2 } from 'lucide-react';
 const STAGES = [
   {
     id: 1,
-    title: 'Connecting to GitHub & fetching code diffs...',
+    title: 'Connecting to GitHub & fetching code differences...',
     detail: 'Retrieving commit logs, branch comparisons, and code changes',
     icon: GitCompare,
     progress: 32,
@@ -13,7 +13,7 @@ const STAGES = [
   },
   {
     id: 2,
-    title: 'Analyzing changes & highlights with Gemini AI...',
+    title: 'Analyzing changes & highlights with AI...',
     detail: 'Extracting key feature updates, architectural refactors, and bug fixes',
     icon: Sparkles,
     progress: 72,
@@ -35,8 +35,8 @@ export default function LoadingPoster() {
   const [stageIndex, setStageIndex] = useState(0);
 
   useEffect(() => {
-    const timer1 = setTimeout(() => setStageIndex(1), 2400);
-    const timer2 = setTimeout(() => setStageIndex(2), 5600);
+    const timer1 = setTimeout(() => setStageIndex(1), 4500);
+    const timer2 = setTimeout(() => setStageIndex(2), 11000);
 
     return () => {
       clearTimeout(timer1);

@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { toPng } from 'html-to-image';
-import { Download, Loader2, Code, AlertTriangle, X, Sparkles, Zap, GitCompare, Upload, Share2 } from 'lucide-react';
+import { Download, Loader2, Code, AlertTriangle, X, Sparkles, Zap, GitCompare, Upload, Share2, Info } from 'lucide-react';
 import Poster from './components/Poster';
 import LoadingPoster from './components/LoadingPoster';
 import ShareModal from './components/ShareModal';
@@ -249,9 +249,11 @@ function App() {
           </div>
         )}
 
-        {/* Form Card (Right Sidebar initially, Shifts Left in Phase 2) */}
-        <div className={`w-full bg-black/40 backdrop-blur-2xl border border-white/20 rounded-3xl p-6 md:p-8 shadow-[0_8px_32px_rgba(255,255,255,0.05)] flex flex-col shrink-0 transition-all duration-700 ease-in-out ${isExpanded ? 'max-w-md md:mr-4 order-1 md:order-1' : 'max-w-lg order-2 md:order-2'}`}>
-          {isExpanded && (
+        {/* Form Card & Note Column (Right Sidebar initially, Shifts Left in Phase 2) */}
+        <div className={`w-full flex flex-col gap-4 shrink-0 transition-all duration-700 ease-in-out ${isExpanded ? 'max-w-md md:mr-4 order-1 md:order-1' : 'max-w-lg order-2 md:order-2'}`}>
+          {/* Form Card */}
+          <div className="w-full bg-black/40 backdrop-blur-2xl border border-white/20 rounded-3xl p-6 md:p-8 shadow-[0_8px_32px_rgba(255,255,255,0.05)] flex flex-col">
+            {isExpanded && (
             <div className="flex items-center justify-between mb-5">
               <span className="text-sm font-semibold text-white/80">Configure Analysis</span>
               <span className="text-[10px] font-mono bg-white/10 px-2 py-0.5 rounded-full text-white/60 border border-white/10 uppercase tracking-wider">
@@ -384,6 +386,16 @@ function App() {
                 <Share2 className="w-5 h-5" />
                 <span>Share</span>
               </button>
+            </div>
+          )}
+          </div>
+
+          {isExpanded && loading && (
+            <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-xs text-amber-200/90 flex items-start gap-2.5 leading-relaxed backdrop-blur-md animate-fade-in shadow-lg">
+              <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-semibold text-amber-300">Note:</span> Please wait for a while since the process is undergoing. If not generated properly, please try once again after a refresh.
+              </div>
             </div>
           )}
         </div>

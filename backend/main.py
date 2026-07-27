@@ -2,6 +2,7 @@ import os
 import re
 import json
 import base64
+import asyncio
 import urllib.parse
 # pyrefly: ignore [missing-import]
 import httpx
@@ -119,6 +120,8 @@ async def fetch_repo_metadata_and_logo(client: httpx.AsyncClient, owner: str, re
         except Exception:
             pass
 
+    tree_files_lower = {p.lower(): p for p in tree_files}
+
     async def get_raw_file(path: str) -> bytes:
         for b in branches_to_check:
             url = f"https://raw.githubusercontent.com/{owner}/{repo}/{b}/{path}"
@@ -130,10 +133,22 @@ async def fetch_repo_metadata_and_logo(client: httpx.AsyncClient, owner: str, re
                 pass
         return b""
 
-    # 1. EXTRACT APPLICATION NAME
+    # 1. EXTRACT APPLICATION NAME (Concurrently fetch index, package.json, readme)
     index_paths = [p for p in tree_files if p.lower().endswith("index.html")] or ["index.html", "public/index.html"]
-    for idx_path in index_paths[:3]:
-        idx_bytes = await get_raw_file(idx_path)
+    pkg_paths = [p for p in tree_files if p.lower().endswith("package.json")] or ["package.json"]
+    readme_paths = [p for p in tree_files if p.lower().endswith("readme.md")] or ["README.md"]
+
+    name_candidates = (index_paths[:2] + pkg_paths[:1] + readme_paths[:1])
+    name_tasks = [get_raw_file(p) for p in name_candidates]
+    name_results = await asyncio.gather(*name_tasks, return_exceptions=True)
+    file_cache: dict[str, bytes] = {}
+    for p, res in zip(name_candidates, name_results):
+        if isinstance(res, bytes) and res:
+            file_cache[p] = res
+
+    # Try index.html titles
+    for idx_path in index_paths[:2]:
+        idx_bytes = file_cache.get(idx_path)
         if idx_bytes:
             try:
                 html_text = idx_bytes.decode("utf-8", errors="ignore")
@@ -147,10 +162,10 @@ async def fetch_repo_metadata_and_logo(client: httpx.AsyncClient, owner: str, re
             except Exception:
                 pass
 
+    # Try package.json
     if not extracted_app_name:
-        pkg_paths = [p for p in tree_files if p.lower().endswith("package.json")] or ["package.json"]
-        for pkg_path in pkg_paths[:2]:
-            pkg_bytes = await get_raw_file(pkg_path)
+        for pkg_path in pkg_paths[:1]:
+            pkg_bytes = file_cache.get(pkg_path)
             if pkg_bytes:
                 try:
                     pkg_data = json.loads(pkg_bytes.decode("utf-8", errors="ignore"))
@@ -163,10 +178,10 @@ async def fetch_repo_metadata_and_logo(client: httpx.AsyncClient, owner: str, re
                 except Exception:
                     pass
 
+    # Try README.md
     if not extracted_app_name:
-        readme_paths = [p for p in tree_files if p.lower().endswith("readme.md")] or ["README.md"]
-        for r_path in readme_paths[:2]:
-            readme_bytes = await get_raw_file(r_path)
+        for r_path in readme_paths[:1]:
+            readme_bytes = file_cache.get(r_path)
             if readme_bytes:
                 try:
                     readme_text = readme_bytes.decode("utf-8", errors="ignore")
@@ -186,7 +201,7 @@ async def fetch_repo_metadata_and_logo(client: httpx.AsyncClient, owner: str, re
     logo_candidates = []
     
     for idx_path in index_paths[:2]:
-        idx_bytes = await get_raw_file(idx_path)
+        idx_bytes = file_cache.get(idx_path)
         if idx_bytes:
             try:
                 html_text = idx_bytes.decode("utf-8", errors="ignore")
@@ -221,19 +236,28 @@ async def fetch_repo_metadata_and_logo(client: httpx.AsyncClient, owner: str, re
         "static/logo.png", "static/logo.svg", "static/favicon.ico", "static/favicon.png"
     ]
     for p in standard_paths:
-        if p not in logo_candidates:
-            logo_candidates.append(p)
+        if tree_files:
+            if p.lower() in tree_files_lower and tree_files_lower[p.lower()] not in logo_candidates:
+                logo_candidates.append(tree_files_lower[p.lower()])
+        else:
+            if p not in logo_candidates:
+                logo_candidates.append(p)
 
-    for path in logo_candidates:
-        content = await get_raw_file(path)
-        if content and len(content) > 50:
-            lower_path = path.lower()
-            mime = "image/svg+xml" if lower_path.endswith(".svg") else (
-                   "image/x-icon" if lower_path.endswith(".ico") else (
-                   "image/webp" if lower_path.endswith(".webp") else (
-                   "image/jpeg" if lower_path.endswith((".jpg", ".jpeg")) else "image/png")))
-            b64 = base64.b64encode(content).decode("utf-8")
-            logo_base64 = f"data:{mime};base64,{b64}"
+    for i in range(0, len(logo_candidates), 8):
+        batch = logo_candidates[i:i+8]
+        tasks = [get_raw_file(path) for path in batch]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for path, content in zip(batch, results):
+            if isinstance(content, bytes) and len(content) > 50:
+                lower_path = path.lower()
+                mime = "image/svg+xml" if lower_path.endswith(".svg") else (
+                       "image/x-icon" if lower_path.endswith(".ico") else (
+                       "image/webp" if lower_path.endswith(".webp") else (
+                       "image/jpeg" if lower_path.endswith((".jpg", ".jpeg")) else "image/png")))
+                b64 = base64.b64encode(content).decode("utf-8")
+                logo_base64 = f"data:{mime};base64,{b64}"
+                break
+        if logo_base64:
             break
 
     if not logo_base64:
@@ -302,8 +326,10 @@ async def analyze_github(request: GitHubRequest):
         diff_headers = headers.copy()
         diff_headers["Accept"] = "application/vnd.github.v3.diff" # Crucial for raw diff
         
-        extracted_app_name, app_logo_b64 = await fetch_repo_metadata_and_logo(client, owner, repo, ref_for_logo, headers)
-        response = await client.get(compare_url, headers=diff_headers)
+        (extracted_app_name, app_logo_b64), response = await asyncio.gather(
+            fetch_repo_metadata_and_logo(client, owner, repo, ref_for_logo, headers),
+            client.get(compare_url, headers=diff_headers)
+        )
         
         if response.status_code == 404:
             raise HTTPException(
