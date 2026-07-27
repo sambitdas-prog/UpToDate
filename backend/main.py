@@ -265,75 +265,6 @@ async def fetch_repo_metadata_and_logo(client: httpx.AsyncClient, owner: str, re
 
     return extracted_app_name, logo_base64
 
-async def fetch_commits_smart(client: httpx.AsyncClient, owner: str, repo: str, headers: dict) -> tuple[str, str]:
-    # 1. Try zero-rate-limit Atom feed first (Bypasses GitHub REST API 60 req/hr IP rate limit)
-    try:
-        atom_url = f"https://github.com/{owner}/{repo}/commits.atom"
-        resp = await client.get(atom_url, follow_redirects=True, timeout=5.0)
-        if resp.status_code == 200 and len(resp.text) > 50:
-            shas = re.findall(r"Commit/([a-f0-9]{40})", resp.text)
-            if not shas:
-                shas = re.findall(r"/commit/([a-f0-9]{40})", resp.text)
-            if len(shas) >= 2:
-                return shas[0], shas[1]
-    except Exception:
-        pass
-
-    # 2. Fallback to GitHub REST API
-    commits_url = f"https://api.github.com/repos/{owner}/{repo}/commits?per_page=10"
-    commits_resp = await client.get(commits_url, headers=headers, timeout=5.0)
-    if commits_resp.status_code == 404:
-        raise HTTPException(status_code=404, detail=f"GitHub returned 404 Not Found. Please verify repository '{owner}/{repo}' exists and is accessible.")
-    elif commits_resp.status_code == 403 and "rate limit" in commits_resp.text.lower():
-        raise HTTPException(status_code=429, detail="GitHub API rate limit exceeded for unauthenticated requests. Please use Compare Branches mode or provide a GITHUB_TOKEN.")
-    elif commits_resp.status_code != 200:
-        raise HTTPException(status_code=commits_resp.status_code, detail="Failed to fetch commits. Check repo URL.")
-    
-    commits = commits_resp.json()
-    if not isinstance(commits, list) or len(commits) < 2:
-        raise HTTPException(status_code=400, detail="Not enough commits to generate a diff.")
-    
-    return commits[0]['sha'], commits[-1]['sha']
-
-async def fetch_diff_smart(client: httpx.AsyncClient, owner: str, repo: str, base_ref: str, head_ref: str, headers: dict) -> str:
-    # 1. Try zero-rate-limit GitHub web diff endpoint first (Bypasses 60 req/hr IP rate limit)
-    try:
-        web_url = f"https://github.com/{owner}/{repo}/compare/{base_ref}...{head_ref}.diff"
-        web_resp = await client.get(web_url, follow_redirects=True, timeout=10.0)
-        if web_resp.status_code == 200:
-            return web_resp.text
-        elif web_resp.status_code == 404:
-            # Handle fork branch syntax (slash vs colon e.g. tmchow/866... -> tmchow:866...)
-            if "/" in head_ref and ":" not in head_ref:
-                alt_head = head_ref.replace("/", ":", 1)
-                web_url_alt = f"https://github.com/{owner}/{repo}/compare/{base_ref}...{alt_head}.diff"
-                web_resp_alt = await client.get(web_url_alt, follow_redirects=True, timeout=10.0)
-                if web_resp_alt.status_code == 200:
-                    return web_resp_alt.text
-    except Exception:
-        pass
-
-    # 2. Fallback to GitHub REST API
-    compare_url = f"https://api.github.com/repos/{owner}/{repo}/compare/{base_ref}...{head_ref}"
-    diff_headers = headers.copy()
-    diff_headers["Accept"] = "application/vnd.github.v3.diff"
-    response = await client.get(compare_url, headers=diff_headers, timeout=10.0)
-    
-    if response.status_code == 404:
-        raise HTTPException(
-            status_code=404, 
-            detail=f"GitHub returned 404 Not Found. Please verify repository '{owner}/{repo}' and branches '{base_ref}' and '{head_ref}' exist and are accessible."
-        )
-    elif response.status_code in [403, 429] and "rate limit" in response.text.lower():
-        raise HTTPException(
-            status_code=429,
-            detail=f"GitHub API rate limit exceeded for unauthenticated requests. Please verify your compare branch '{head_ref}' is spelled correctly (for fork branches use 'owner:branch')."
-        )
-    elif response.status_code != 200:
-        raise HTTPException(status_code=response.status_code, detail=f"Failed to fetch diff from GitHub: {response.text}")
-        
-    return response.text
-
 @app.post("/api/analyze")
 @app.post("/api/v1/analyze-github")
 async def analyze_github(request: GitHubRequest):
@@ -342,9 +273,13 @@ async def analyze_github(request: GitHubRequest):
         raise HTTPException(status_code=400, detail="The URL of the Repository is not valid. Please enter a valid Repository URL.")
         
     try:
-        owner, repo, base_b, head_b = parse_github_url(raw_url, request.base_branch, request.head_branch)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        owner, repo = parse_github_url(raw_url)
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+    
+    base_b = request.base_branch.strip() if request.base_branch and request.base_branch.strip() else None
+    head_b = request.head_branch or request.compare_branch
+    head_b = head_b.strip() if head_b and head_b.strip() else None
 
     # Base headers for GitHub API calls
     headers = {
@@ -358,7 +293,20 @@ async def analyze_github(request: GitHubRequest):
     async with httpx.AsyncClient(follow_redirects=True) as client:
         # MODE 1: AUTO-DETECT COMMITS
         if not base_b and not head_b:
-            head_ref, base_ref = await fetch_commits_smart(client, owner, repo, headers)
+            commits_url = f"https://api.github.com/repos/{owner}/{repo}/commits?per_page=10"
+            commits_resp = await client.get(commits_url, headers=headers)
+            
+            if commits_resp.status_code == 404:
+                raise HTTPException(status_code=404, detail=f"GitHub returned 404 Not Found. Please verify repository '{owner}/{repo}' exists and is accessible.")
+            elif commits_resp.status_code != 200:
+                raise HTTPException(status_code=commits_resp.status_code, detail="Failed to fetch commits. Check repo URL.")
+            
+            commits = commits_resp.json()
+            if not isinstance(commits, list) or len(commits) < 2:
+                raise HTTPException(status_code=400, detail="Not enough commits to generate a diff.")
+            
+            head_ref = commits[0]['sha']
+            base_ref = commits[-1]['sha']
             ref_for_logo = head_ref
 
         # MODE 2: MANUAL BRANCH COMPARISON
@@ -371,12 +319,34 @@ async def analyze_github(request: GitHubRequest):
 
             base_ref = base_b
             head_ref = head_b
+            if "/" in head_ref and ":" not in head_ref:
+                head_ref = head_ref.replace("/", ":", 1)
             ref_for_logo = head_ref
 
-        (extracted_app_name, app_logo_b64), diff_text = await asyncio.gather(
+        # Format comparison endpoint
+        compare_url = f"https://api.github.com/repos/{owner}/{repo}/compare/{base_ref}...{head_ref}"
+        diff_headers = headers.copy()
+        diff_headers["Accept"] = "application/vnd.github.v3.diff" # Crucial for raw diff
+        
+        (extracted_app_name, app_logo_b64), response = await asyncio.gather(
             fetch_repo_metadata_and_logo(client, owner, repo, ref_for_logo, headers),
-            fetch_diff_smart(client, owner, repo, base_ref, head_ref, headers)
+            client.get(compare_url, headers=diff_headers)
         )
+        
+        if response.status_code == 404:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"GitHub returned 404 Not Found. Please verify repository '{owner}/{repo}' and branches '{base_ref}' and '{head_ref}' exist and are accessible."
+            )
+        elif response.status_code in [403, 429] and "rate limit" in response.text.lower():
+            raise HTTPException(
+                status_code=429,
+                detail="GitHub API rate limit exceeded. Please configure a GITHUB_TOKEN environment variable on your hosting server to get 5,000 requests/hour."
+            )
+        elif response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail=f"Failed to fetch diff from GitHub: {response.text}")
+            
+        diff_text = response.text
         
         # Check if diff is empty (identical contents)
         if not diff_text.strip():
