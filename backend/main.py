@@ -325,10 +325,13 @@ async def analyze_github(request: GitHubRequest):
         compare_url = f"https://api.github.com/repos/{owner}/{repo}/compare/{base_ref}...{head_ref}"
         diff_headers = headers.copy()
         diff_headers["Accept"] = "application/vnd.github.v3.diff" # Crucial for raw diff
+        json_headers = headers.copy()
+        json_headers["Accept"] = "application/vnd.github.v3+json"
         
-        (extracted_app_name, app_logo_b64), response = await asyncio.gather(
+        (extracted_app_name, app_logo_b64), response, json_response = await asyncio.gather(
             fetch_repo_metadata_and_logo(client, owner, repo, ref_for_logo, headers),
-            client.get(compare_url, headers=diff_headers)
+            client.get(compare_url, headers=diff_headers),
+            client.get(compare_url, headers=json_headers)
         )
         
         if response.status_code == 404:
@@ -361,6 +364,30 @@ async def analyze_github(request: GitHubRequest):
                 }
             )
         
+        # Extract Commit Messages for Hybrid UI Navigation Path Extraction
+        commit_messages = []
+        try:
+            if json_response.status_code == 200:
+                for c in json_response.json().get("commits", []):
+                    msg = c.get("commit", {}).get("message", "").strip()
+                    if msg:
+                        commit_messages.append(msg)
+        except Exception as e:
+            print("Could not parse commit messages:", e)
+        commit_messages_text = "\n---\n".join(commit_messages)
+
+        def extract_explicit_ui_path(text: str):
+            import re
+            match = re.search(r'(?:UI-PATH|NAVIGATION):\s*([^\n\r]+)', text, re.IGNORECASE)
+            if match:
+                raw_path = match.group(1).strip()
+                steps = [s.strip() for s in re.split(r'->|→|>', raw_path) if s.strip()]
+                if steps:
+                    return steps
+            return None
+            
+        explicit_ui_path = extract_explicit_ui_path(commit_messages_text)
+        
         # Truncate if too long (25k chars)
         if len(diff_text) > 25000:
             diff_text = diff_text[:25000] + "\n...[TRUNCATED]"
@@ -370,27 +397,45 @@ async def analyze_github(request: GitHubRequest):
             
         # Call Gemini
         prompt = f"""
-Act as a product marketer and UI designer. Review this git diff for repository '{owner}/{repo}'.
-1. Extract the top 3-4 major user-facing features, architectural improvements, or significant bug fixes into engaging marketing feature cards.
-2. Determine the official Application Name. The actual application name extracted from the repository is '{extracted_app_name or repo.replace("-", " ").replace("_", " ").title()}'. You MUST output "{extracted_app_name or repo.replace("-", " ").replace("_", " ").title()}" as "app_name". Do NOT invent, guess, or hallucinate any other name (such as 'Aether', 'App', etc.).
-3. VERY IMPORTANT: Write all feature titles and descriptions in PLAIN, SIMPLE, CLEAR ENGLISH. Do not use hard English, complex vocabulary, technical jargon, or corporate buzzwords. Explain what changed in simple everyday terms so that anyone can easily understand it at a glance.
+Act as a product marketer, UI developer, and content strategist. Your task is to act as a practical instructional guide for users regarding a single new GitHub commit/feature update for repository '{owner}/{repo}'. Do not write promotional App Store marketing fluff. Be strictly feature-centric, instructional, clean, and professional.
+
+1. Extract Feature Delta Only: Parse ONLY the code changes between the two commits/branches. Do not summarize the main README.md or existing application scope. The entire poster must revolve around ONE specific feature/commit.
+2. Determine the official Application Name. The actual application name extracted from the repository is '{extracted_app_name or repo.replace("-", " ").replace("_", " ").title()}'. You MUST output "{extracted_app_name or repo.replace("-", " ").replace("_", " ").title()}" as "app_name". Do NOT invent, guess, or hallucinate any other name.
+3. VERY IMPORTANT: Write all titles and descriptions in PLAIN, SIMPLE, CLEAR ENGLISH. Explain what changed in simple everyday terms.
+4. UI Navigation Path Extraction (Hybrid Strategy):
+   - Step A (Priority Override): Search the Commit Messages below for an explicit tag in the format "UI-PATH: <step 1> -> <step 2> -> <step 3>" (or "NAVIGATION: ..."). If found, use this exact path for "navigation_path".
+   - Step B (Codebase Inference Fallback): If no explicit tag exists, analyze the code diff for routing changes, menu arrays, navigation graphs, or side-drawer configurations (e.g., Android Navigation Graphs, Jetpack Compose routes, React Router paths). Infer the user journey from the main screen to the new component and generate the step-by-step path array.
+5. "What You Can Do" Section (Capabilities): Do NOT list random, unrelated app features here. Break down the key sub-actions of this single main feature.
+   - By default, extract EXACTLY 3 key capabilities/sub-actions of this single main feature so they display cleanly as 3 columns.
+   - ONLY extract 4 items (for a 2x2 grid) if there is an exceptionally rich amount of distinct information and functionality to share that genuinely requires 4 separate cards. Never generate 4 cards just to fill space if 3 items represent the feature better. Each item needs a small icon_hint, a bold title, and a brief 1-line benefit.
+6. Important Note/Warning Banner: If there are any breaking changes or deprecations related to this commit, output a warning string in "warning_note". If there are none, output null.
 
 Enforce this strict JSON output schema:
 {{
   "app_name": "Clean human-readable name of the application (e.g. UpToDate)",
-  "headline": "A short, extremely punchy title in simple English (max 5 words).",
-  "subheadline": "A slightly longer, clear subtitle in plain English.",
-  "summary": "A 2-3 sentence engaging overview of the update written in simple, easy-to-understand plain English.",
-  "theme_keyword": "A single simple word (e.g., 'speed', 'ui', 'security').",
+  "headline": "Specific Feature Name (e.g. Lesson Plan Management)",
+  "subheadline": "A brief introduction about the change in 1-2 lines.",
+  "what_is_it": "A concise 1-2 sentence explanation of what the new feature actually does.",
+  "summary": "A concise 1-2 sentence explanation of what the new feature actually does.",
+  "theme_keyword": "A single simple word (e.g., 'academics', 'management', 'security').",
+  "navigation_path": [
+    "Open side menu",
+    "Under ACADEMICS",
+    "Select Lesson Plan"
+  ],
+  "warning_note": "Note: The old import feature is now disabled. (or null if no breaking change)",
   "features": [
     {{
-      "category": "Major Feature | Polish | Fix",
-      "title": "Clear, simple feature name in plain English",
-      "description": "1-2 simple sentences explaining the update in easy-to-understand plain English without hard technical jargon.",
-      "icon_hint": "name of a standard icon (e.g., 'zap', 'shield', 'eye', 'tool', 'bug')"
+      "category": "Capability",
+      "title": "Clear, simple sub-action name in plain English",
+      "description": "Brief 1-line benefit describing this capability.",
+      "icon_hint": "name of a standard icon (e.g., 'plus', 'edit', 'trash', 'check', 'zap', 'shield', 'eye', 'tool', 'bug', 'folder', 'star')"
     }}
   ]
 }}
+
+Here are the Commit Messages for this comparison:
+{commit_messages_text}
 
 Here is the diff:
 {diff_text}
@@ -429,8 +474,18 @@ Here is the diff:
                 if not data.get("subheadline"):
                     data["subheadline"] = "New features and improvements"
                     
+                if not data.get("what_is_it"):
+                    data["what_is_it"] = data.get("summary") or "A new feature update improving workflow and capabilities."
                 if not data.get("summary"):
-                    data["summary"] = "Various improvements and bug fixes have been made in this release to enhance stability and performance."
+                    data["summary"] = data.get("what_is_it")
+                    
+                if explicit_ui_path:
+                    data["navigation_path"] = explicit_ui_path
+                elif not data.get("navigation_path") or not isinstance(data.get("navigation_path"), list):
+                    data["navigation_path"] = ["Main Menu", "Feature navigation"]
+                    
+                if not data.get("warning_note") or str(data.get("warning_note")).strip().lower() in ["null", "none", ""]:
+                    data["warning_note"] = None
                     
                 if not data.get("theme_keyword"):
                     data["theme_keyword"] = "update"
@@ -438,16 +493,22 @@ Here is the diff:
                 if not data.get("features") or not isinstance(data["features"], list):
                     data["features"] = [
                         {
-                            "category": "Polish",
+                            "category": "Capability",
                             "title": "Codebase optimizations",
                             "description": "General refactoring and performance tuning across the application.",
                             "icon_hint": "zap"
                         },
                         {
                             "category": "Fix",
-                            "title": "Bug Fixes",
+                            "title": "Bug Fixes & Stability",
                             "description": "Resolved various edge cases and UI inconsistencies.",
                             "icon_hint": "bug"
+                        },
+                        {
+                            "category": "Polish",
+                            "title": "UI & UX Refinement",
+                            "description": "Smoother visual transitions and improved responsiveness.",
+                            "icon_hint": "sparkles"
                         }
                     ]
 

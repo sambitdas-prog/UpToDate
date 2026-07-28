@@ -1,5 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Sparkles, CheckCircle2, Zap, Shield, Eye, Bug, PenTool, Layout, Box, Star, Layers } from 'lucide-react';
+import { 
+  Sparkles, CheckCircle2, Zap, Shield, Eye, Bug, PenTool, Layout, Box, Star, Layers, 
+  Navigation, ChevronRight, AlertTriangle, Compass, MapPin, Plus, Edit3, Trash2, Folder, 
+  FileText, Settings, Search, User 
+} from 'lucide-react';
 import { getSwatches } from 'colorthief';
 
 const IconMap = {
@@ -10,7 +14,20 @@ const IconMap = {
   tool: PenTool,
   layout: Layout,
   box: Box,
-  star: Star
+  star: Star,
+  layers: Layers,
+  plus: Plus,
+  edit: Edit3,
+  trash: Trash2,
+  folder: Folder,
+  file: FileText,
+  settings: Settings,
+  search: Search,
+  user: User,
+  check: CheckCircle2,
+  navigation: Navigation,
+  compass: Compass,
+  pin: MapPin
 };
 
 const hexToRgba = (hex, alpha) => {
@@ -122,6 +139,29 @@ const Poster = React.forwardRef(({ data }, ref) => {
   const appName = formatAppName(data.app_name, data.app_repo);
   const avatarUrl = data.app_avatar;
   const features = data.features || [];
+  const explanationText = data.what_is_it || data.summary;
+  const navSteps = Array.isArray(data.navigation_path)
+    ? data.navigation_path
+    : (typeof data.navigation_path === 'string'
+        ? data.navigation_path.split(/->|→|>|:/).map(s => s.trim()).filter(Boolean)
+        : ['Main Menu', 'Select Feature']);
+  // Smart column vs grid layout optimization:
+  // - 1 to 3 items: Use COLUMNS (grid-cols-1, grid-cols-2, or grid-cols-3) so all items sit across 1 row.
+  // - 4 items: Use 2x2 GRID (grid-cols-2) when there is a good amount of information to share.
+  // - 5 items: Use 6 columns where top row has 3 items (col-span-2) and bottom row has 2 items (col-span-3) for zero empty space.
+  // - 6+ items: Use 3-column grid (grid-cols-3).
+  const gridColsClass = features.length === 4 
+    ? 'grid-cols-2' 
+    : (features.length === 5 
+        ? 'grid-cols-6' 
+        : (features.length === 2 ? 'grid-cols-2' : (features.length === 1 ? 'grid-cols-1' : 'grid-cols-3')));
+
+  const getColSpanClass = (idx, total) => {
+    if (total === 5) {
+      return idx < 3 ? 'col-span-2' : 'col-span-3';
+    }
+    return '';
+  };
 
   return (
     <div 
@@ -159,7 +199,7 @@ const Poster = React.forwardRef(({ data }, ref) => {
       <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_center,transparent_40%,rgba(0,0,0,0.4)_100%)]"></div>
       <div className="absolute inset-0 pointer-events-none border-t border-white/[0.08] rounded-3xl"></div>
 
-      {/* Header Bar */}
+      {/* Top Header Bar */}
       <div className="relative z-10 flex items-center justify-between gap-4 mb-8">
         <div className="flex items-center gap-3 bg-white/[0.06] border border-white/10 px-4 py-2.5 rounded-2xl shadow-xl">
           {avatarUrl && !imgError ? (
@@ -191,9 +231,9 @@ const Poster = React.forwardRef(({ data }, ref) => {
         </div>
       </div>
 
-      {/* Hero Content */}
+      {/* a) The "What's New" Header (Feature-First) & b) The "What is it?" Section (Explanation) */}
       <div className="relative z-10 flex flex-col items-center text-center">
-        <h1 className="text-6xl font-black text-transparent bg-clip-text leading-tight mb-4 tracking-tight drop-shadow-[0_2px_12px_rgba(255,255,255,0.1)]"
+        <h1 className="text-6xl font-black text-transparent bg-clip-text leading-tight mb-3 tracking-tight drop-shadow-[0_2px_12px_rgba(255,255,255,0.1)]"
             style={{ backgroundImage: `linear-gradient(to bottom right, #ffffff, ${hexToRgba(getThemeColor(1), 0.9)})` }}>
           {data.headline || data.title}
         </h1>
@@ -201,16 +241,16 @@ const Poster = React.forwardRef(({ data }, ref) => {
           <h2 className="text-2xl font-bold text-white/80 mb-4 tracking-wide">{data.subheadline}</h2>
         )}
         <p className="text-xl text-white/70 leading-relaxed max-w-3xl font-light mb-8 drop-shadow-sm">
-          {data.summary}
+          {explanationText}
         </p>
 
-        {/* Optional Hero Image */}
+        {/* Primary Main Screenshot or Mockup of Feature in Action */}
         {data.heroImageUrl && (
-          <div className="w-full max-w-2xl mb-10 rounded-2xl border border-white/10 overflow-hidden shadow-[0_24px_60px_rgba(0,0,0,0.6)] relative group">
+          <div className="w-full max-w-2xl mb-8 rounded-2xl border border-white/10 overflow-hidden shadow-[0_24px_60px_rgba(0,0,0,0.6)] relative group">
             <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-white/[0.05] to-transparent z-10"></div>
             <img 
               src={data.heroImageUrl} 
-              alt="Hero Screenshot" 
+              alt="Feature Screenshot" 
               className="w-full h-auto object-cover" 
               crossOrigin={data.heroImageUrl.startsWith('data:') ? undefined : "anonymous"}
             />
@@ -218,9 +258,9 @@ const Poster = React.forwardRef(({ data }, ref) => {
         )}
       </div>
 
-      {/* Features Grid */}
+      {/* c) The "What You Can Do" Grid (Capabilities) */}
       <div className="relative z-10 flex-1 w-full my-4">
-        <div className={`grid gap-4 ${features.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+        <div className={`grid gap-4 ${gridColsClass}`}>
           {features.map((feature, idx) => {
             const isObject = typeof feature === 'object';
             const title = isObject ? feature.title : feature;
@@ -231,12 +271,12 @@ const Poster = React.forwardRef(({ data }, ref) => {
             
             // Assign a color from the palette to each feature card for variety
             const cardColor = getThemeColor(idx % brandColors.length);
-            const isOddLast = features.length % 2 !== 0 && idx === features.length - 1 && features.length > 1;
+            const colSpanClass = getColSpanClass(idx, features.length);
 
             return (
               <div 
                 key={idx} 
-                className={`flex flex-col gap-3 p-5 rounded-2xl bg-black/40 border shadow-2xl relative overflow-hidden ${isOddLast ? 'col-span-2' : ''}`}
+                className={`flex flex-col gap-3 p-5 rounded-2xl bg-black/40 border shadow-2xl relative overflow-hidden ${colSpanClass}`}
                 style={{ borderColor: hexToRgba(cardColor, 0.2) }}
               >
                 {/* Subtle card internal glow */}
@@ -255,13 +295,13 @@ const Poster = React.forwardRef(({ data }, ref) => {
                     <IconComponent className="w-5 h-5" style={{ color: cardColor }} />
                   </div>
                   {category && (
-                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full bg-black/60 text-white/70 border border-white/5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-black/60 text-white/70 border border-white/10">
                       {category}
                     </span>
                   )}
                 </div>
                 <div className="relative z-10 mt-1">
-                  <h4 className="text-lg font-bold text-white mb-1.5 leading-snug tracking-tight">{title}</h4>
+                  <h4 className="text-lg font-bold text-white mb-1 leading-snug tracking-tight">{title}</h4>
                   {description && <p className="text-sm text-white/60 leading-relaxed">{description}</p>}
                 </div>
               </div>
@@ -270,8 +310,54 @@ const Poster = React.forwardRef(({ data }, ref) => {
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="relative z-10 mt-8 pt-6 border-t border-white/10 flex justify-between items-center text-white/40">
+      {/* d) The "How to Navigate" Section (Instructional Path) */}
+      <div 
+        className="relative z-10 w-full my-4 p-5 rounded-2xl bg-white/[0.04] border border-white/10 shadow-xl overflow-hidden flex flex-col gap-3"
+        style={{ borderColor: hexToRgba(getThemeColor(0), 0.25) }}
+      >
+        <div 
+          className="absolute inset-0 pointer-events-none opacity-15"
+          style={{ background: `radial-gradient(circle at left, ${hexToRgba(getThemeColor(0), 0.6)}, transparent 70%)` }}
+        ></div>
+        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-white/80">
+          <Compass className="w-4 h-4" style={{ color: getThemeColor(0) }} />
+          <span>How to Navigate</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 mt-1">
+          {navSteps.map((step, sIdx) => (
+            <React.Fragment key={sIdx}>
+              <div 
+                className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-black/60 border text-white font-semibold text-sm shadow-md"
+                style={{ borderColor: sIdx === navSteps.length - 1 ? hexToRgba(getThemeColor(0), 0.6) : 'rgba(255,255,255,0.15)' }}
+              >
+                {sIdx === navSteps.length - 1 && (
+                  <MapPin className="w-4 h-4 shrink-0" style={{ color: getThemeColor(0) }} />
+                )}
+                <span>{step}</span>
+              </div>
+              {sIdx < navSteps.length - 1 && (
+                <ChevronRight className="w-4 h-4 text-white/40 shrink-0" />
+              )}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+
+      {/* e) Important Note/Warning Banner (Optional/Conditional) */}
+      {data.warning_note && (
+        <div className="relative z-10 w-full my-2 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 shadow-lg flex items-start gap-3">
+          <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 shrink-0 mt-0.5">
+            <AlertTriangle className="w-4 h-4" />
+          </div>
+          <div className="flex-1 text-sm font-medium leading-relaxed">
+            <span className="font-bold text-amber-300 mr-1.5">Important Note:</span>
+            {data.warning_note.replace(/^(?:Important )?Note:\s*/i, '')}
+          </div>
+        </div>
+      )}
+
+      {/* f) Footer */}
+      <div className="relative z-10 mt-6 pt-6 border-t border-white/10 flex justify-between items-center text-white/40">
         <div className="flex items-center gap-2">
           <div className="text-base font-bold text-white/80">{appName}</div>
           <div className="w-1 h-1 rounded-full bg-white/20"></div>
