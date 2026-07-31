@@ -392,31 +392,54 @@ async def analyze_github(request: GitHubRequest):
         if len(diff_text) > 25000:
             diff_text = diff_text[:25000] + "\n...[TRUNCATED]"
 
-        if not GEMINI_API_KEY:
-            raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured on server.")
+        api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or GEMINI_API_KEY
+        if not api_key:
+            load_dotenv(override=True)
+            api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+            
+        if not api_key:
+            raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured on server. Please ensure your GEMINI_API_KEY or GOOGLE_API_KEY is set in your environment variables or .env file.")
+
+        genai.configure(api_key=api_key)
             
         # Call Gemini
         prompt = f"""
-Act as a product marketer, UI developer, and content strategist. Your task is to act as a practical instructional guide for users regarding a single new GitHub commit/feature update for repository '{owner}/{repo}'. Do not write promotional App Store marketing fluff. Be strictly feature-centric, instructional, clean, and professional.
+Act as an expert Full-Stack Developer, product marketer, UI developer, and content strategist. Your task is to act as an automated GitHub release note generator and instructional guide for repository '{owner}/{repo}' based on the comparison of commits and code changes. Be strictly feature-centric, instructional, clean, and professional.
 
-1. Extract Feature Delta Only: Parse ONLY the code changes between the two commits/branches. Do not summarize the main README.md or existing application scope. The entire poster must revolve around ONE specific feature/commit.
-2. Determine the official Application Name. The actual application name extracted from the repository is '{extracted_app_name or repo.replace("-", " ").replace("_", " ").title()}'. You MUST output "{extracted_app_name or repo.replace("-", " ").replace("_", " ").title()}" as "app_name". Do NOT invent, guess, or hallucinate any other name.
-3. VERY IMPORTANT: Write all titles and descriptions in PLAIN, SIMPLE, CLEAR ENGLISH. Explain what changed in simple everyday terms.
-4. UI Navigation Path Extraction (Hybrid Strategy):
+CRITICAL RULES FOR EXTRACTION & COUNTING:
+1. 1-to-1 Commit to Feature Mapping: Analyze the commit messages below and extract EVERY SINGLE distinct modification or commit. Each commit message represents ONE distinct change. You MUST generate an item in the "features" array for EVERY single commit message without skipping or dropping any commit.
+2. Zero Dropped Bug Fixes: DO NOT ignore, drop, or omit ANY bug fixes! Every bug fix (e.g., classroom filter and student count calculation fixes, internet connection status indicator fixes, UI/UX fixes, etc.) MUST be included in "features" with category "FIX".
+3. Zero Dropped Media/Gallery Capabilities: DO NOT ignore, drop, or omit ANY media, gallery, download, or image features (e.g., downloading classroom images to mobile gallery, clicking classroom pictures up to 12 photos, etc.).
+4. Zero Split Commits (No Duplication/Splitting): DO NOT split a single concept, migration, or commit into multiple separate rows in "features"! For example, if a commit involves migrating a feature (such as "Lesson plan import migration to ERP") which includes both UI navigation updates and official ERP portal configurations, you MUST combine them into ONE single comprehensive feature entry in "features". Never split one logical commit across multiple rows.
+
+5. State Determination:
+   - If you identify only 1 major feature or logical grouping, set "update_type": "single_feature".
+   - If you identify 2 or more distinct features, modifications, or bug fixes, set "update_type": "multi_feature".
+6. Headline & Subheadline Generation:
+   - If "update_type" is "single_feature", generate a Feature-Specific Headline (e.g. "Lesson Plan Management") in "headline".
+   - If "update_type" is "multi_feature", generate a generalized release title in "headline" (e.g., "Weekly Update: Performance, Fixes & New Tools").
+7. Determine the official Application Name. The actual application name extracted from the repository is '{extracted_app_name or repo.replace("-", " ").replace("_", " ").title()}'. You MUST output "{extracted_app_name or repo.replace("-", " ").replace("_", " ").title()}" as "app_name". Do NOT invent, guess, or hallucinate any other name.
+8. VERY IMPORTANT: Write all titles and descriptions in PLAIN, SIMPLE, CLEAR ENGLISH. Explain what changed in simple everyday terms.
+9. UI Navigation Path Extraction (Hybrid Strategy - relevant when update_type == "single_feature"):
    - Step A (Priority Override): Search the Commit Messages below for an explicit tag in the format "UI-PATH: <step 1> -> <step 2> -> <step 3>" (or "NAVIGATION: ..."). If found, use this exact path for "navigation_path".
-   - Step B (Codebase Inference Fallback): If no explicit tag exists, analyze the code diff for routing changes, menu arrays, navigation graphs, or side-drawer configurations (e.g., Android Navigation Graphs, Jetpack Compose routes, React Router paths). Infer the user journey from the main screen to the new component and generate the step-by-step path array.
-5. "What You Can Do" Section (Capabilities): Do NOT list random, unrelated app features here. Break down the key sub-actions of this single main feature.
-   - By default, extract EXACTLY 3 key capabilities/sub-actions of this single main feature so they display cleanly as 3 columns.
-   - ONLY extract 4 items (for a 2x2 grid) if there is an exceptionally rich amount of distinct information and functionality to share that genuinely requires 4 separate cards. Never generate 4 cards just to fill space if 3 items represent the feature better. Each item needs a small icon_hint, a bold title, and a brief 1-line benefit.
-6. Important Note/Warning Banner: If there are any breaking changes or deprecations related to this commit, output a warning string in "warning_note". If there are none, output null.
+   - Step B (Codebase Inference Fallback): If no explicit tag exists, analyze the code diff for routing changes, menu arrays, navigation graphs, or side-drawer configurations. Infer the user journey from the main screen to the new component and generate the step-by-step path array.
+10. Features Array (Modifications):
+    - In "single_feature" mode: Extract 2-4 key sub-capabilities/sub-actions of this single main feature. Each item must have a category (e.g., "CAPABILITY"), title, description, and icon_hint.
+    - In "multi_feature" mode: Exhaustively list EVERY single commit modification as an item in "features" (1-to-1 mapping with the Commit Messages). Each item must include:
+      - "category": A status badge string ("NEW", "FIX", "POLISH", "PERF", "REFACTOR", "SECURITY"). Use "FIX" for bug fixes.
+      - "title": A bold, concise change title in plain English.
+      - "description": A 1-2 sentence description of the change.
+      - "icon_hint": name of a standard icon (e.g., 'plus', 'edit', 'trash', 'check', 'zap', 'shield', 'eye', 'tool', 'bug', 'folder', 'star', 'sparkles', 'layers').
+11. Important Note/Warning Banner: If there are any breaking changes or deprecations related to this commit, output a warning string in "warning_note". If there are none, output null.
 
 Enforce this strict JSON output schema:
 {{
+  "update_type": "single_feature | multi_feature",
   "app_name": "Clean human-readable name of the application (e.g. UpToDate)",
-  "headline": "Specific Feature Name (e.g. Lesson Plan Management)",
+  "headline": "Specific Feature Name or Generalized Release Title (e.g. 'Weekly Update: Performance, Fixes & New Tools')",
   "subheadline": "A brief introduction about the change in 1-2 lines.",
-  "what_is_it": "A concise 1-2 sentence explanation of what the new feature actually does.",
-  "summary": "A concise 1-2 sentence explanation of what the new feature actually does.",
+  "what_is_it": "A concise 1-2 sentence explanation of what the new feature(s) or release actually does.",
+  "summary": "A concise 1-2 sentence explanation of what the new feature(s) or release actually does.",
   "theme_keyword": "A single simple word (e.g., 'academics', 'management', 'security').",
   "navigation_path": [
     "Open side menu",
@@ -426,24 +449,26 @@ Enforce this strict JSON output schema:
   "warning_note": "Note: The old import feature is now disabled. (or null if no breaking change)",
   "features": [
     {{
-      "category": "Capability",
-      "title": "Clear, simple sub-action name in plain English",
-      "description": "Brief 1-line benefit describing this capability.",
+      "category": "NEW | FIX | POLISH | PERF | REFACTOR | SECURITY",
+      "title": "Clear, simple change or sub-action name in plain English",
+      "description": "1-2 sentence description of the change.",
       "icon_hint": "name of a standard icon (e.g., 'plus', 'edit', 'trash', 'check', 'zap', 'shield', 'eye', 'tool', 'bug', 'folder', 'star')"
     }}
   ]
 }}
 
-Here are the Commit Messages for this comparison:
+Here are the Commit Messages for this comparison (IMPORTANT: Every commit below MUST correspond to exactly ONE item in "features", including all bug fixes and download features, without splitting any commit into multiple items):
 {commit_messages_text}
 
 Here is the diff:
 {diff_text}
 """
         candidate_models = [
+            "gemini-3.1-pro",
             "gemini-3.5-flash",
             "gemini-3.6-flash",
-            "gemini-flash-latest",
+            "gemini-1.5-pro-latest",
+            "gemini-1.5-flash",
             "gemini-2.5-flash"
         ]
         
@@ -490,27 +515,42 @@ Here is the diff:
                 if not data.get("theme_keyword"):
                     data["theme_keyword"] = "update"
                     
-                if not data.get("features") or not isinstance(data["features"], list):
+                if not data.get("features") or not isinstance(data["features"], list) or len(data["features"]) == 0:
                     data["features"] = [
                         {
-                            "category": "Capability",
+                            "category": "NEW",
                             "title": "Codebase optimizations",
                             "description": "General refactoring and performance tuning across the application.",
                             "icon_hint": "zap"
                         },
                         {
-                            "category": "Fix",
+                            "category": "FIX",
                             "title": "Bug Fixes & Stability",
                             "description": "Resolved various edge cases and UI inconsistencies.",
                             "icon_hint": "bug"
                         },
                         {
-                            "category": "Polish",
+                            "category": "POLISH",
                             "title": "UI & UX Refinement",
                             "description": "Smoother visual transitions and improved responsiveness.",
                             "icon_hint": "sparkles"
                         }
                     ]
+
+                features_list = data.get("features", [])
+                if not isinstance(features_list, list):
+                    features_list = []
+
+                if not data.get("update_type") or str(data.get("update_type")).strip().lower() not in ["single_feature", "multi_feature"]:
+                    if len(features_list) >= 2:
+                        data["update_type"] = "multi_feature"
+                    else:
+                        data["update_type"] = "single_feature"
+                else:
+                    data["update_type"] = str(data.get("update_type")).strip().lower()
+
+                if data["update_type"] == "multi_feature" and (not data.get("headline") or data.get("headline") == "Release Update"):
+                    data["headline"] = "Weekly Update: Performance, Fixes & New Tools"
 
                 data["app_owner"] = owner
                 data["app_repo"] = repo
@@ -521,7 +561,10 @@ Here is the diff:
                 last_error = e
                 print(f"Model {model_name} failed: {e}. Trying fallback...")
                 
-        raise HTTPException(status_code=500, detail=f"Failed to generate analysis: {str(last_error)}")
+        err_str = str(last_error)
+        if "API_KEY_INVALID" in err_str or "API key not valid" in err_str:
+            raise HTTPException(status_code=400, detail="Invalid Gemini API Key. Please verify that your API key from https://aistudio.google.com/app/apikey is correctly saved in backend/.env.")
+        raise HTTPException(status_code=500, detail=f"Failed to generate analysis: {err_str}")
 
 @app.get("/")
 def read_root():

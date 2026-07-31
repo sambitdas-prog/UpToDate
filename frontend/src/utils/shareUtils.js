@@ -27,7 +27,8 @@ export function generateShareCaption(posterData, repoUrl) {
       const isObject = typeof feature === 'object' && feature !== null;
       const title = isObject ? (feature.title || '') : String(feature);
       const description = isObject && feature.description ? `: ${feature.description}` : '';
-      caption += `👉 ${title}${description}\n`;
+      const category = isObject && feature.category ? `[${String(feature.category).replace(/[\[\]]/g, '').toUpperCase()}] ` : '';
+      caption += `👉 ${category}${title}${description}\n`;
     });
   }
 
@@ -160,7 +161,7 @@ export function getPlatformIntentUrl(platform, caption, targetUrl) {
 
   switch (platform) {
     case 'whatsapp':
-      return `https://api.whatsapp.com/send?text=${encodedCaption}`;
+      return `whatsapp://send?text=${encodedCaption}`;
     case 'twitter':
     case 'x':
       return `https://twitter.com/intent/tweet?text=${encodedCaption}`;

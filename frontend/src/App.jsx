@@ -1,9 +1,48 @@
-import { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { toPng } from 'html-to-image';
-import { Download, Loader2, Code, AlertTriangle, X, Sparkles, Zap, GitCompare, Upload, Share2, Info } from 'lucide-react';
+import { Download, Loader2, Code, AlertTriangle, X, Sparkles, Zap, GitCompare, Upload, Share2, Info, AlertCircle } from 'lucide-react';
 import Poster from './components/Poster';
 import LoadingPoster from './components/LoadingPoster';
 import ShareModal from './components/ShareModal';
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("Poster ErrorBoundary caught an error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="w-[640px] h-[960px] flex flex-col items-center justify-center bg-[#080808] border border-red-500/30 rounded-3xl p-8 text-center relative overflow-hidden shadow-2xl">
+          <div className="w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center mb-4 text-red-400">
+            <AlertCircle className="w-7 h-7" />
+          </div>
+          <h3 className="text-xl font-bold text-white mb-2">Poster Rendering Error</h3>
+          <p className="text-sm text-white/60 max-w-md mb-6 leading-relaxed">
+            An unexpected error occurred while rendering the release poster payload.
+          </p>
+          <button 
+            onClick={() => this.setState({ hasError: false, error: null })}
+            className="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/20 transition-all"
+          >
+            Try Re-rendering
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 const GithubIcon = ({ className }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
@@ -129,16 +168,25 @@ function App() {
   const handleDownload = async () => {
     if (posterRef.current && posterData && !posterData.no_diff) {
       try {
+        showShareToast('Generating high-resolution PNG poster...');
         const dataUrl = await toPng(posterRef.current, { 
           quality: 0.95,
           pixelRatio: 2,
-          cacheBust: true,
+          cacheBust: false,
+          skipFonts: true,
+          includeQueryParams: false,
+          style: {
+            transform: 'scale(1)',
+            transformOrigin: 'top left',
+            margin: '0',
+          }
         });
         const link = document.createElement('a');
         const fileName = posterData?.app_repo ? `${posterData.app_repo}-release-poster.png` : 'release-poster.png';
         link.download = fileName;
         link.href = dataUrl;
         link.click();
+        showShareToast('Poster PNG downloaded successfully!');
       } catch (err) {
         console.error('Failed to download image', err);
         setError(`Failed to generate image download: ${err?.message || 'Rendering error'}`);
@@ -161,7 +209,14 @@ function App() {
       const dataUrl = await toPng(posterRef.current, {
         quality: 0.95,
         pixelRatio: 2,
-        cacheBust: true,
+        cacheBust: false,
+        skipFonts: true,
+        includeQueryParams: false,
+        style: {
+          transform: 'scale(1)',
+          transformOrigin: 'top left',
+          margin: '0',
+        }
       });
       setShareImageUrl(dataUrl);
     } catch (err) {
@@ -403,11 +458,13 @@ function App() {
         {/* Phase 2 & 3: Right Preview Area (Appears with Scale-Up Pop-up animation when isExpanded = true) */}
         {isExpanded && (
           <div className={`flex-1 flex items-center justify-center relative z-10 w-full overflow-x-hidden max-h-screen p-4 md:p-8 animate-popup-scale ${posterData && !posterData.no_diff && !loading ? 'overflow-y-auto' : 'overflow-hidden'}`}>
-            <div className="origin-top md:origin-center transform scale-[0.45] sm:scale-[0.55] lg:scale-[0.65] xl:scale-[0.75] 2xl:scale-[0.85] transition-transform my-auto">
+            <div className="origin-top md:origin-center transform scale-[0.50] sm:scale-[0.60] lg:scale-[0.68] xl:scale-[0.72] 2xl:scale-[0.78] transition-transform my-auto">
               {loading ? (
                 <LoadingPoster />
               ) : (
-                <Poster key={posterData?.headline || 'poster'} ref={posterRef} data={{...posterData, heroImageUrl}} />
+                <ErrorBoundary key={posterData?.headline || 'poster-error-boundary'}>
+                  <Poster key={posterData?.headline || 'poster'} ref={posterRef} data={{...posterData, heroImageUrl}} />
+                </ErrorBoundary>
               )}
             </div>
           </div>
