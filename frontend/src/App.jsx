@@ -4,6 +4,7 @@ import { Download, Loader2, Code, AlertTriangle, X, Sparkles, Zap, GitCompare, U
 import Poster from './components/Poster';
 import LoadingPoster from './components/LoadingPoster';
 import ShareModal from './components/ShareModal';
+import FeatureSelectModal from './components/FeatureSelectModal';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -59,7 +60,7 @@ const InstagramIcon = ({ className }) => (
 
 function App() {
   const [url, setUrl] = useState('');
-  const [heroImageUrl, setHeroImageUrl] = useState('');
+  const [importedImages, setImportedImages] = useState([]);
   const [mode, setMode] = useState('auto'); // 'auto' | 'manual'
   const [baseBranch, setBaseBranch] = useState('main');
   const [compareBranch, setCompareBranch] = useState('develop');
@@ -72,6 +73,8 @@ function App() {
   const [shareImageUrl, setShareImageUrl] = useState('');
   const [isGeneratingShareImage, setIsGeneratingShareImage] = useState(false);
   const [shareToastMessage, setShareToastMessage] = useState('');
+  const [isFeatureSelectModalOpen, setIsFeatureSelectModalOpen] = useState(false);
+  const [pendingFetchedData, setPendingFetchedData] = useState(null);
   
   const posterRef = useRef(null);
 
@@ -82,15 +85,44 @@ function App() {
     }, 4500);
   };
 
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
+  const handleImageImport = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    const remainingSlots = 2 - importedImages.length;
+    const filesToProcess = files.slice(0, Math.max(0, remainingSlots));
+
+    filesToProcess.forEach((file) => {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setHeroImageUrl(reader.result);
+      reader.onload = (event) => {
+        const dataUrl = event.target.result;
+        const img = new Image();
+        img.onload = () => {
+          const isLandscape = img.naturalWidth >= img.naturalHeight;
+          setImportedImages((prev) => {
+            if (prev.length >= 2) return prev;
+            return [
+              ...prev,
+              {
+                id: Date.now() + Math.random(),
+                url: dataUrl,
+                name: file.name,
+                orientation: isLandscape ? 'landscape' : 'portrait',
+                width: img.naturalWidth,
+                height: img.naturalHeight,
+              }
+            ];
+          });
+        };
+        img.src = dataUrl;
       };
       reader.readAsDataURL(file);
-    }
+    });
+    e.target.value = '';
+  };
+
+  const removeImportedImage = (idToRemove) => {
+    setImportedImages((prev) => prev.filter((item) => item.id !== idToRemove));
   };
 
   const handleAnalyze = async (e) => {
@@ -157,7 +189,12 @@ function App() {
       const dataStr = await response.json();
       const data = typeof dataStr === 'string' ? JSON.parse(dataStr) : dataStr;
       
-      setPosterData(data);
+      if (data.features && Array.isArray(data.features) && data.features.length > 0 && !data.no_diff) {
+        setPendingFetchedData(data);
+        setIsFeatureSelectModalOpen(true);
+      } else {
+        setPosterData(data);
+      }
     } catch (err) {
       setError(err.message || 'An unexpected error occurred');
     } finally {
@@ -165,9 +202,26 @@ function App() {
     }
   };
 
+  const handleFeatureSelectContinue = (selectedIndices) => {
+    if (!pendingFetchedData) return;
+    const selectedFeatures = pendingFetchedData.features.filter((_, idx) =>
+      selectedIndices.includes(idx)
+    );
+    const updatedData = {
+      ...pendingFetchedData,
+      features: selectedFeatures,
+    };
+    setPosterData(updatedData);
+    setIsFeatureSelectModalOpen(false);
+    setPendingFetchedData(null);
+  };
+
   const handleDownload = async () => {
     if (posterRef.current && posterData && !posterData.no_diff) {
       try {
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+        }
         showShareToast('Generating high-resolution PNG poster...');
         const dataUrl = await toPng(posterRef.current, { 
           quality: 0.95,
@@ -203,6 +257,9 @@ function App() {
 
   const handleOpenShareModal = async () => {
     if (!posterRef.current || !posterData || posterData.no_diff) return;
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
     setIsGeneratingShareImage(true);
     setIsShareModalOpen(true);
     try {
@@ -345,8 +402,8 @@ function App() {
             </button>
           </div>
 
-          <form onSubmit={handleAnalyze} className="space-y-6 flex-1">
-            <div>
+          <form onSubmit={handleAnalyze} className="flex-1 flex flex-col">
+            <div className="mb-6">
               <label className="block text-sm font-medium text-white/80 mb-2">GitHub Repository URL</label>
               <input 
                 type="text" 
@@ -356,19 +413,33 @@ function App() {
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
               />
-              {mode === 'auto' && (
-                <p className="mt-2 text-xs text-white/50 flex items-center gap-1.5">
+              <div 
+                className={`transition-all duration-500 ease-in-out overflow-hidden ${
+                  mode === 'auto' 
+                    ? 'max-h-12 opacity-100 mt-2' 
+                    : 'max-h-0 opacity-0 mt-0'
+                }`}
+              >
+                <p className="text-xs text-white/50 flex items-center gap-1.5">
                   <span>ℹ️</span> We'll automatically analyze recent commits from the default branch.
                 </p>
-              )}
+              </div>
             </div>
-            {mode === 'manual' && (
-              <div className="grid grid-cols-2 gap-4 animate-fade-in">
+
+            <div 
+              className={`transition-all duration-500 ease-in-out overflow-hidden ${
+                mode === 'manual' 
+                  ? 'max-h-40 opacity-100 mb-6' 
+                  : 'max-h-0 opacity-0 mb-0'
+              }`}
+            >
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-white/80 mb-2">Base Branch</label>
                   <input 
                     type="text" 
-                    required
+                    required={mode === 'manual'}
+                    tabIndex={mode === 'manual' ? 0 : -1}
                     placeholder="main"
                     className="w-full bg-black/50 border border-white/20 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:border-white focus:ring-1 focus:ring-white shadow-inner text-white placeholder-white/30 transition-all"
                     value={baseBranch}
@@ -379,7 +450,8 @@ function App() {
                   <label className="block text-sm font-medium text-white/80 mb-2">Compare Branch</label>
                   <input 
                     type="text" 
-                    required
+                    required={mode === 'manual'}
+                    tabIndex={mode === 'manual' ? 0 : -1}
                     placeholder="develop"
                     className="w-full bg-black/50 border border-white/20 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:border-white focus:ring-1 focus:ring-white shadow-inner text-white placeholder-white/30 transition-all"
                     value={compareBranch}
@@ -387,24 +459,6 @@ function App() {
                   />
                 </div>
               </div>
-            )}
-
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-medium text-white/80">Example Image URL (Optional)</label>
-                <label className="text-xs text-cyan-400 hover:text-cyan-300 cursor-pointer flex items-center gap-1.5 transition-colors">
-                  <Upload className="w-3.5 h-3.5" />
-                  Upload Local
-                  <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-                </label>
-              </div>
-              <input 
-                type="text" 
-                placeholder="Paste image URL or upload..."
-                className="w-full bg-black/50 border border-white/20 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:border-white focus:ring-1 focus:ring-white shadow-inner text-white placeholder-white/30 transition-all"
-                value={heroImageUrl}
-                onChange={(e) => setHeroImageUrl(e.target.value)}
-              />
             </div>
 
             <button 
@@ -423,24 +477,74 @@ function App() {
           </form>
 
           {posterData && !posterData.no_diff && isExpanded && (
-            <div className="mt-8 pt-8 border-t border-white/10 animate-fade-in grid grid-cols-4 gap-3">
-              <button 
-                onClick={handleDownload}
-                disabled={loading}
-                className="col-span-3 bg-transparent border border-white hover:bg-white hover:text-black text-white font-semibold py-3.5 rounded-xl shadow-[0_4px_20px_rgba(255,255,255,0.1)] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                <Download className="w-5 h-5" />
-                <span>Download Poster (PNG)</span>
-              </button>
-              <button 
-                onClick={handleOpenShareModal}
-                disabled={loading}
-                className="col-span-1 bg-transparent border border-white hover:bg-white hover:text-black text-white font-semibold py-3.5 px-3 rounded-xl shadow-[0_4px_20px_rgba(255,255,255,0.1)] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                title="Share Release Update"
-              >
-                <Share2 className="w-5 h-5" />
-                <span>Share</span>
-              </button>
+            <div className="mt-5 pt-5 border-t border-white/10 animate-fade-in space-y-3.5">
+              {/* Image Import Section */}
+              <div className="flex items-center gap-2.5 bg-white/[0.03] border border-white/10 rounded-xl p-2 min-w-0 w-full overflow-hidden">
+                <label 
+                  className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border font-medium text-xs transition-all cursor-pointer shrink-0 ${
+                    importedImages.length >= 2 
+                      ? 'bg-white/5 border-white/10 text-white/40 cursor-not-allowed' 
+                      : 'bg-white/[0.08] hover:bg-white/[0.15] border-white/20 text-white shadow-sm'
+                  }`}
+                >
+                  <Upload className="w-3.5 h-3.5 shrink-0" />
+                  <span>Import Image {importedImages.length > 0 ? `(${importedImages.length}/2)` : ''}</span>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    multiple 
+                    disabled={importedImages.length >= 2}
+                    className="hidden" 
+                    onChange={handleImageImport} 
+                  />
+                </label>
+
+                {/* Selected Images' URL/name beside the button */}
+                <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-hidden">
+                  {importedImages.map((img) => (
+                    <div 
+                      key={img.id} 
+                      className="group flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/[0.06] border border-white/15 text-white/90 text-[11px] font-mono min-w-0 max-w-[140px] sm:max-w-[180px] shrink overflow-hidden"
+                    >
+                      <span className="truncate block min-w-0 flex-1" title={img.name || 'Imported Image'}>{img.name || 'Image'}</span>
+                      <button 
+                        type="button" 
+                        onClick={() => removeImportedImage(img.id)}
+                        className="text-white/60 group-hover:text-white hover:text-red-400 transition-colors shrink-0 p-0.5 rounded hover:bg-white/10"
+                        title="Remove image"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                  {importedImages.length === 0 && (
+                    <span className="text-[11px] text-white/45 italic truncate block">
+                      No images imported. Upload up to 2.
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Download & Share Action Buttons */}
+              <div className="grid grid-cols-4 gap-3">
+                <button 
+                  onClick={handleDownload}
+                  disabled={loading}
+                  className="col-span-3 bg-transparent border border-white hover:bg-white hover:text-black text-white font-semibold py-3.5 rounded-xl shadow-[0_4px_20px_rgba(255,255,255,0.1)] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <Download className="w-5 h-5" />
+                  <span>Download Poster (PNG)</span>
+                </button>
+                <button 
+                  onClick={handleOpenShareModal}
+                  disabled={loading}
+                  className="col-span-1 bg-transparent border border-white hover:bg-white hover:text-black text-white font-semibold py-3.5 px-3 rounded-xl shadow-[0_4px_20px_rgba(255,255,255,0.1)] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  title="Share Release Update"
+                >
+                  <Share2 className="w-5 h-5" />
+                  <span>Share</span>
+                </button>
+              </div>
             </div>
           )}
           </div>
@@ -463,7 +567,7 @@ function App() {
                 <LoadingPoster />
               ) : (
                 <ErrorBoundary key={posterData?.headline || 'poster-error-boundary'}>
-                  <Poster key={posterData?.headline || 'poster'} ref={posterRef} data={{...posterData, heroImageUrl}} />
+                  <Poster key={posterData?.headline || 'poster'} ref={posterRef} data={{...posterData, importedImages}} />
                 </ErrorBoundary>
               )}
             </div>
@@ -546,6 +650,15 @@ function App() {
         posterData={posterData}
         repoUrl={url}
         onToast={showShareToast}
+      />
+
+      {/* Feature Selection Modal before implementing poster */}
+      <FeatureSelectModal
+        isOpen={isFeatureSelectModalOpen}
+        features={pendingFetchedData?.features || []}
+        onContinue={handleFeatureSelectContinue}
+        onClear={() => {}}
+        onClose={() => setIsFeatureSelectModalOpen(false)}
       />
     </div>
   );

@@ -6,16 +6,24 @@
 
 ## 🌟 Key Features
 
-- **Automated GitHub Diff Analysis**: Connects directly to the GitHub REST API to fetch and analyze precise code differences between any two branches, tags, or commits.
-- **AI-Powered Release Summaries**: Uses **Google Gemini 2.5 / 3.5 / 3.6 Flash** models to parse code changes and extract:
-  - 🚀 **Major Feature Highlights**: High-level value propositions.
-  - 🛠️ **Bug Fixes & Enhancements**: Categorized technical improvements.
-  - ⚠️ **Breaking Changes & Warnings**: Crucial alerts for users.
-  - 🗺️ **Step-by-step Navigation Path**: User guidance on how to navigate new updates.
-- **Dynamic Poster Theme & Styling**: 
-  - Sleek dark-mode aesthetic with frosted glass elements (`backdrop-blur`).
-  - Automatic dynamic palette extraction via `ColorThief` to adapt poster theme colors.
-- **High-Resolution PNG Export**: Uses `html-to-image` for client-side, loss-less export ready for Twitter/X, LinkedIn, Discord, or product changelogs.
+- **Dual-Mode GitHub Diff Analysis**: 
+  - **Auto Mode**: Automatically detects recent branch updates and commits for instant analysis.
+  - **Manual Mode**: Allows custom comparison between specific base and head branches/tags.
+- **Robust GitHub Connection & Rate-Limit Fallbacks**: Connects via GitHub REST API with alternate web diff fallback strategies to support high-traffic repos and repository forks without rate-limit interruptions.
+- **AI-Powered Release Intelligence**: Uses **Google Gemini 2.5 / 3.5 / 3.6 Flash** models to parse code diffs into structured, user-friendly copy:
+  - 🚀 **Categorized Features**: Badged under `NEW`, `FIX`, `POLISH`, `PERF`, `REFACTOR`, or `SECURITY`.
+  - 🗺️ **UI Navigation Paths**: Extracted or inferred step-by-step user journey guides.
+  - ⚠️ **Breaking Change Banners**: Contextual warning alerts when breaking updates are detected.
+  - 💬 **Plain-English Translations**: Converts raw commit messages into clear product value statements.
+- **Interactive Feature Selector Modal**: Pick and choose exactly which extracted features to showcase on your poster before rendering.
+- **Custom Screenshot & Media Uploads**: Attach up to 2 product screenshots or mockups directly into the poster layout.
+- **Automatic Branding & Logo Extraction**: Intelligent server-side fetcher that extracts app icons, favicons, or repository avatars and embeds them seamlessly as high-quality base64 logos.
+- **Dynamic Poster Theme & Glassmorphism UI**: 
+  - Sleek dark-mode aesthetic with frosted glass textures (`backdrop-blur`).
+  - Interactive Error Boundary to catch and manage poster payload render issues gracefully.
+- **High-Resolution PNG Export & Social Sharing**:
+  - One-click client-side 4K PNG export using `html-to-image`.
+  - Built-in **Social Share Modal** tailored for Twitter/X, LinkedIn, Facebook, and Instagram.
 
 ---
 
@@ -23,12 +31,12 @@
 
 | Layer | Technology | Description |
 | :--- | :--- | :--- |
-| **Backend** | Python 3.9+ / FastAPI | High-performance asynchronous REST API |
-| **AI Integration** | Google Generative AI SDK | Gemini Flash models with robust fallback handling |
-| **Frontend** | React 19 + Vite | Blazing fast client-side app with ES module imports |
-| **Styling** | Tailwind CSS v3 | Utility-first styling with custom glassmorphism design |
-| **Icons & Media** | Lucide React / ColorThief | Clean SVG icons & dynamic color palette extraction |
-| **Poster Export** | html-to-image | Client-side DOM rendering to 4K PNG format |
+| **Backend** | Python 3.9+ / FastAPI | Async REST API with parallel logo fetching & diff parsing |
+| **AI Engine** | Google Generative AI SDK | Gemini Flash models with strict JSON schema enforcement |
+| **Frontend** | React 19 + Vite | High-performance SPA with smooth transition choreography |
+| **Styling** | Tailwind CSS v3 | Modern glassmorphism UI design with dynamic dark theme |
+| **Icons & UI** | Lucide React | Clean, responsive SVG icon set |
+| **Poster Export** | html-to-image | High-DPI DOM canvas rendering to PNG format |
 
 ---
 
@@ -37,22 +45,26 @@
 ```
 Comparison/
 ├── backend/                  # Python FastAPI Backend
-│   ├── main.py               # REST API endpoints & Gemini prompt engineering
+│   ├── main.py               # REST API endpoints, logo fetcher & Gemini prompt engine
 │   ├── requirements.txt      # Python dependencies
 │   ├── .env.example          # Template for backend environment variables
 │   └── .env                  # Private backend config (API keys - Git ignored)
 │
 ├── frontend/                 # React + Vite Frontend
 │   ├── src/                  # Application source code
-│   │   ├── components/       # Poster & UI rendering components
-│   │   ├── App.jsx           # Main UI logic & API fetch layer
-│   │   └── main.jsx          # React entrypoint
-│   ├── index.html            # HTML shell
+│   │   ├── components/       # Component architecture
+│   │   │   ├── Poster.jsx               # Main poster preview canvas component
+│   │   │   ├── LoadingPoster.jsx        # Skeleton loader during diff analysis
+│   │   │   ├── FeatureSelectModal.jsx   # Interactive feature filter modal
+│   │   │   └── ShareModal.jsx           # Social sharing preview & export modal
+│   │   ├── App.jsx           # Main state management, form inputs & API handlers
+│   │   └── main.jsx          # React DOM entrypoint
+│   ├── index.html            # HTML document shell & app branding
 │   ├── package.json          # Frontend dependencies & scripts
-│   └── vite.config.js        # Vite build configuration
+│   └── vite.config.js        # Vite dev server & build config
 │
 ├── vercel.json               # Deployment routing configuration (Frontend + Backend)
-├── .gitignore                # Global git ignore configuration
+├── .gitignore                # Global git ignore rules
 └── README.md                 # Project documentation
 ```
 
@@ -64,7 +76,7 @@ Comparison/
 
 - **Python 3.9+** installed
 - **Node.js 18+** & `npm` installed
-- A **Google Gemini API Key** (obtainable from [Google AI Studio](https://aistudio.google.com/))
+- A **Google Gemini API Key** (get one at [Google AI Studio](https://aistudio.google.com/))
 
 ---
 
@@ -86,26 +98,26 @@ Comparison/
    source venv/bin/activate
    ```
 
-3. Install required Python packages:
+3. Install required Python dependencies:
    ```bash
    pip install -r requirements.txt
    ```
 
-4. Create a `.env` file inside `backend/`:
+4. Set up environment variables inside `backend/`:
    ```bash
    cp .env.example .env
    ```
 
-5. Open `backend/.env` and add your Gemini API Key:
+5. Open `backend/.env` and insert your Gemini API Key:
    ```env
    GEMINI_API_KEY=your_actual_gemini_api_key_here
    ```
 
-6. Start the FastAPI backend server:
+6. Run the FastAPI backend server:
    ```bash
-   uvicorn main:app --reload --port 8000
+   uvicorn main:app --reload
    ```
-   The API will be available at `http://localhost:8000`.
+   The API server will listen at `http://localhost:8000`.
 
 ---
 
@@ -116,29 +128,28 @@ Comparison/
    cd frontend
    ```
 
-2. Install Node dependencies:
+2. Install Node packages:
    ```bash
    npm install
    ```
 
-3. Start the Vite development server:
+3. Start the Vite dev server:
    ```bash
    npm run dev
    ```
-   The web UI will be available at `http://localhost:5173`.
+   Access the web app at `http://localhost:5173`.
 
 ---
 
 ## 💡 How to Use
 
-1. Launch both the **Backend** (`http://localhost:8000`) and **Frontend** (`http://localhost:5173`).
-2. Open the web UI in your browser.
-3. Input a **GitHub Repository URL** (e.g. `https://github.com/facebook/react`).
-4. Select or enter:
-   - **Base Branch** (e.g. `main` or `v1.0.0`)
-   - **Compare Branch** (e.g. `develop` or `v1.1.0`)
-5. Click **Analyze Codebase**.
-6. Review the generated poster preview and click **Download Poster** to save the PNG image.
+1. **Enter Repository URL**: Paste any public GitHub repository link (e.g. `https://github.com/facebook/react`).
+2. **Choose Mode**:
+   - **Auto Mode**: Instant release generation based on default repo comparison.
+   - **Manual Mode**: Specify your exact **Base Branch** and **Compare/Head Branch**.
+3. **Attach Media (Optional)**: Import up to 2 product screenshots to display alongside release notes.
+4. **Analyze & Select Features**: Click **Analyze Codebase**. When analysis completes, use the **Feature Selector Modal** to pick which changes to include.
+5. **Preview & Export**: Review the generated poster preview, then click **Download Poster** or **Share** to generate your high-res PNG.
 
 ---
 
@@ -146,31 +157,49 @@ Comparison/
 
 ### `POST /api/analyze`
 
-Analyzes repository diffs and generates structured poster data.
+Analyzes repository diffs, extracts brand metadata/logo, and generates structured release poster data.
 
 #### Request Body
 ```json
 {
   "repo_url": "https://github.com/owner/repo",
+  "mode": "manual",
   "base_branch": "main",
   "compare_branch": "feature-branch"
 }
 ```
 
-#### Response Body
-Returns structured JSON containing:
-- `version`: Release tag or version name.
-- `tagline`: Snappy catchphrase summarizing the update.
-- `highlights`: Key feature bullet points.
-- `improvements`: Secondary bug fixes/optimizations.
-- `breaking_changes`: Any critical deprecations or alerts.
-- `nav_steps`: Step-by-step navigation path.
-- `tech_specs`: Frameworks, diff line counts, and technical metadata.
+#### Response Body Schema
+```json
+{
+  "update_type": "single_feature | multi_feature",
+  "app_name": "UpToDate",
+  "app_repo": "owner/repo",
+  "logo_url": "data:image/png;base64,...",
+  "headline": "Weekly Update: Performance, Fixes & New Tools",
+  "subheadline": "A brief overview of key improvements in this release.",
+  "what_is_it": "Concise summary explaining what the update delivers.",
+  "navigation_path": [
+    "Open side menu",
+    "Select Settings",
+    "Enable Feature"
+  ],
+  "warning_note": "Note: Old API endpoint deprecated. (or null)",
+  "features": [
+    {
+      "category": "NEW | FIX | POLISH | PERF | REFACTOR | SECURITY",
+      "title": "Clear change title",
+      "description": "1-2 sentence user-friendly explanation.",
+      "icon_hint": "sparkles"
+    }
+  ]
+}
+```
 
 ---
 
 ## 🛡️ Environment & Security
 
-- All API keys (`AI_API_KEY`) are kept exclusively on the server side in `backend/.env`.
-- The frontend makes HTTP calls to the backend (`/api/analyze`) and never exposes private secret keys to client browsers.
-- Environment files (`*.env`) are strictly excluded from version control via `.gitignore`.
+- Server-side API key protection: Gemini API keys (`GEMINI_API_KEY`) remain strictly on the backend (`backend/.env`).
+- Environment configuration files (`*.env`) are strictly excluded from version control via `.gitignore`.
+

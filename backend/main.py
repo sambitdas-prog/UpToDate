@@ -3,7 +3,6 @@ import re
 import json
 import base64
 import asyncio
-import urllib.parse
 # pyrefly: ignore [missing-import]
 import httpx
 # pyrefly: ignore [missing-import]
@@ -88,7 +87,7 @@ async def fetch_avatar_base64(client: httpx.AsyncClient, owner: str) -> str:
             print(f"Failed to fetch avatar from {url}: {e}")
     return f"https://github.com/{owner}.png"
 
-async def fetch_repo_metadata_and_logo(client: httpx.AsyncClient, owner: str, repo: str, branch: str, headers: dict) -> tuple[Optional[str], str]:
+async def fetch_repo_metadata_and_logo(client: httpx.AsyncClient, owner: str, repo: str, branch: str, headers: dict) -> tuple[Optional[str], str, list]:
     extracted_app_name = None
     logo_base64 = None
     
@@ -263,7 +262,48 @@ async def fetch_repo_metadata_and_logo(client: httpx.AsyncClient, owner: str, re
     if not logo_base64:
         logo_base64 = await fetch_avatar_base64(client, owner)
 
-    return extracted_app_name, logo_base64
+    # 3. EXTRACT APPLICATION COLOR PALETTE FROM CSS / STYLE FILES
+    app_palette = []
+    css_candidates = []
+    for f in tree_files:
+        lower_f = f.lower()
+        if lower_f.endswith((".css", ".scss", ".less", "tailwind.config.js", "tailwind.config.ts", "theme.js", "theme.ts", "colors.js", "styles.js", "index.html")):
+            if any(k in lower_f for k in ["index.", "app.", "global", "main.", "style", "tailwind", "theme", "color"]):
+                if f not in css_candidates:
+                    css_candidates.append(f)
+        if len(css_candidates) >= 5:
+            break
+
+    if not css_candidates:
+        css_candidates = [f for f in tree_files if f.lower().endswith((".css", ".scss", ".less", ".html"))][:3]
+
+    css_tasks = [get_raw_file(p) for p in css_candidates[:4]]
+    css_results = await asyncio.gather(*css_tasks, return_exceptions=True)
+    extracted_hexes = []
+    boring_colors = {
+        "#000000", "#ffffff", "#000", "#fff", "#050505", "#0a0a0a", "#111111", "#1a1a1a",
+        "#222222", "#333333", "#444444", "#555555", "#666666", "#777777", "#888888", "#999999",
+        "#aaaaaa", "#bbbbbb", "#cccccc", "#dddddd", "#eeeeee", "#e5e7eb", "#f3f4f6", "#f9fafb",
+        "#111827", "#1f2937", "#374151", "#4b5563", "#6b7280", "#9ca3af", "#d1d5db"
+    }
+    for res in css_results:
+        if isinstance(res, bytes) and res:
+            try:
+                text = res.decode("utf-8", errors="ignore")
+                found_hex = re.findall(r'#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b', text)
+                for h in found_hex:
+                    hex_code = "#" + (h if len(h) == 6 else "".join([c*2 for c in h])).lower()
+                    if hex_code not in boring_colors and hex_code not in extracted_hexes:
+                        extracted_hexes.append(hex_code)
+            except Exception:
+                pass
+
+    if len(extracted_hexes) >= 3:
+        app_palette = extracted_hexes[:6]
+    else:
+        app_palette = extracted_hexes + [c for c in ["#3B82F6", "#8B5CF6", "#10B8A6", "#F59E0B", "#EC4899", "#6366F1"] if c.lower() not in extracted_hexes][:6]
+
+    return extracted_app_name, logo_base64, app_palette
 
 @app.post("/api/analyze")
 @app.post("/api/v1/analyze-github")
@@ -293,7 +333,7 @@ async def analyze_github(request: GitHubRequest):
     async with httpx.AsyncClient(follow_redirects=True) as client:
         # MODE 1: AUTO-DETECT COMMITS
         if not base_b and not head_b:
-            commits_url = f"https://api.github.com/repos/{owner}/{repo}/commits?per_page=10"
+            commits_url = f"https://api.github.com/repos/{owner}/{repo}/commits?per_page=30"
             commits_resp = await client.get(commits_url, headers=headers)
             
             if commits_resp.status_code == 404:
@@ -328,7 +368,7 @@ async def analyze_github(request: GitHubRequest):
         json_headers = headers.copy()
         json_headers["Accept"] = "application/vnd.github.v3+json"
         
-        (extracted_app_name, app_logo_b64), response, json_response = await asyncio.gather(
+        (extracted_app_name, app_logo_b64, app_palette), response, json_response = await asyncio.gather(
             fetch_repo_metadata_and_logo(client, owner, repo, ref_for_logo, headers),
             client.get(compare_url, headers=diff_headers),
             client.get(compare_url, headers=json_headers)
@@ -374,10 +414,15 @@ async def analyze_github(request: GitHubRequest):
                         commit_messages.append(msg)
         except Exception as e:
             print("Could not parse commit messages:", e)
-        commit_messages_text = "\n---\n".join(commit_messages)
+
+        formatted_commit_lines = []
+        for idx, msg in enumerate(commit_messages, 1):
+            first_line = msg.split('\n')[0].strip()
+            formatted_commit_lines.append(f"[Commit #{idx}]: {first_line}")
+        commit_messages_text = "\n".join(formatted_commit_lines) if formatted_commit_lines else "No commit messages"
+        total_commits_count = len(commit_messages)
 
         def extract_explicit_ui_path(text: str):
-            import re
             match = re.search(r'(?:UI-PATH|NAVIGATION):\s*([^\n\r]+)', text, re.IGNORECASE)
             if match:
                 raw_path = match.group(1).strip()
@@ -386,7 +431,7 @@ async def analyze_github(request: GitHubRequest):
                     return steps
             return None
             
-        explicit_ui_path = extract_explicit_ui_path(commit_messages_text)
+        explicit_ui_path = extract_explicit_ui_path("\n---\n".join(commit_messages))
         
         # Truncate if too long (25k chars)
         if len(diff_text) > 25000:
@@ -406,31 +451,37 @@ async def analyze_github(request: GitHubRequest):
         prompt = f"""
 Act as an expert Full-Stack Developer, product marketer, UI developer, and content strategist. Your task is to act as an automated GitHub release note generator and instructional guide for repository '{owner}/{repo}' based on the comparison of commits and code changes. Be strictly feature-centric, instructional, clean, and professional.
 
-CRITICAL RULES FOR EXTRACTION & COUNTING:
-1. 1-to-1 Commit to Feature Mapping: Analyze the commit messages below and extract EVERY SINGLE distinct modification or commit. Each commit message represents ONE distinct change. You MUST generate an item in the "features" array for EVERY single commit message without skipping or dropping any commit.
-2. Zero Dropped Bug Fixes: DO NOT ignore, drop, or omit ANY bug fixes! Every bug fix (e.g., classroom filter and student count calculation fixes, internet connection status indicator fixes, UI/UX fixes, etc.) MUST be included in "features" with category "FIX".
-3. Zero Dropped Media/Gallery Capabilities: DO NOT ignore, drop, or omit ANY media, gallery, download, or image features (e.g., downloading classroom images to mobile gallery, clicking classroom pictures up to 12 photos, etc.).
-4. Zero Split Commits (No Duplication/Splitting): DO NOT split a single concept, migration, or commit into multiple separate rows in "features"! For example, if a commit involves migrating a feature (such as "Lesson plan import migration to ERP") which includes both UI navigation updates and official ERP portal configurations, you MUST combine them into ONE single comprehensive feature entry in "features". Never split one logical commit across multiple rows.
-
-5. State Determination:
-   - If you identify only 1 major feature or logical grouping, set "update_type": "single_feature".
-   - If you identify 2 or more distinct features, modifications, or bug fixes, set "update_type": "multi_feature".
-6. Headline & Subheadline Generation:
-   - If "update_type" is "single_feature", generate a Feature-Specific Headline (e.g. "Lesson Plan Management") in "headline".
-   - If "update_type" is "multi_feature", generate a generalized release title in "headline" (e.g., "Weekly Update: Performance, Fixes & New Tools").
-7. Determine the official Application Name. The actual application name extracted from the repository is '{extracted_app_name or repo.replace("-", " ").replace("_", " ").title()}'. You MUST output "{extracted_app_name or repo.replace("-", " ").replace("_", " ").title()}" as "app_name". Do NOT invent, guess, or hallucinate any other name.
-8. VERY IMPORTANT: Write all titles and descriptions in PLAIN, SIMPLE, CLEAR ENGLISH. Explain what changed in simple everyday terms.
-9. UI Navigation Path Extraction (Hybrid Strategy - relevant when update_type == "single_feature"):
+CRITICAL RULES FOR EXHAUSTIVE FEATURE EXTRACTION:
+1. Exhaustive Feature Discovery from Diff and Commits: Analyze both the Commit Messages and the Code Diff (diff_text) below. Extract EVERY SINGLE distinct new feature, user-facing capability, functional enhancement, UI/UX improvement, and bug fix implemented in this update.
+2. Separate Rows for Each Distinct Feature/Capability: Do NOT group, merge, or collapse multiple distinct features or capabilities into a single item! If a branch or commit introduces 7 to 8 distinct features, enhancements, or bug fixes (for example: expanded photo capacity, gallery downloads, automatic single-subject selection, UI improvements, bug fixes, etc.), EACH one MUST be listed as a separate, individual item in the "features" array.
+3. Zero Dropped Bug Fixes & Improvements: DO NOT ignore, drop, or omit ANY bug fixes, media/gallery capabilities, download features, or UI refinements. Every distinct change MUST be included in "features" with its appropriate category badge ("NEW", "FIX", "POLISH", "PERF", "REFACTOR", "SECURITY").
+4. State Determination:
+   - Always set "update_type": "multi_feature" when there are 2 or more distinct features or improvements found.
+   - Set "update_type": "single_feature" ONLY if the entire diff contains just 1 single isolated change.
+5. Headline & Subheadline Generation:
+   - If "update_type": "single_feature", generate a Feature-Specific Headline (e.g. "Lesson Plan Management") in "headline".
+   - If "update_type": "multi_feature", generate a generalized release title in "headline" (e.g., "Weekly Update: Performance, Fixes & New Tools").
+6. Determine the official Application Name. The actual application name extracted from the repository is '{extracted_app_name or repo.replace("-", " ").replace("_", " ").title()}'. You MUST output "{extracted_app_name or repo.replace("-", " ").replace("_", " ").title()}" as "app_name". Do NOT invent, guess, or hallucinate any other name.
+7. VERY IMPORTANT - EASY, FRIENDLY, PLAIN ENGLISH FOR ROW-WISE FEATURES:
+   - You MUST write the "title" and "description" of EVERY item in the "features" array in EASY-TO-UNDERSTAND, FRIENDLY, PLAIN ENGLISH.
+   - DO NOT use complicated, overly technical, or hard English jargon (like "zero-rate-limit fetchers", "REST API fork conversion", "composite layout configurations", "HTTPS sandbox issues", etc.).
+   - Translate technical git/code changes into clear, user-friendly everyday language that any team member, product manager, or non-technical user can easily read and understand at a glance.
+     * Example Technical Title: "Zero-Rate-Limit Github Fallbacks" -> Better Easy Title: "Reliable GitHub Connection"
+     * Example Technical Desc: "Implements an alternate Web Diff... to bypass hourly rate limits" -> Better Easy Desc: "Added backup connection methods so you never get blocked when analyzing busy GitHub repositories."
+     * Example Technical Title: "Restored REST API with Fork Support" -> Better Easy Title: "Support for Forked Branches"
+     * Example Technical Desc: "Restores deep REST API differences while adding automatic conversion..." -> Better Easy Desc: "You can now easily compare and analyze branches across different repository forks."
+   - Make sure each feature title is short, punchy, and friendly (3-6 words), and each description explains the practical benefit in 1-2 simple, easy-to-read sentences.
+8. UI Navigation Path Extraction (Hybrid Strategy - relevant when update_type == "single_feature"):
    - Step A (Priority Override): Search the Commit Messages below for an explicit tag in the format "UI-PATH: <step 1> -> <step 2> -> <step 3>" (or "NAVIGATION: ..."). If found, use this exact path for "navigation_path".
    - Step B (Codebase Inference Fallback): If no explicit tag exists, analyze the code diff for routing changes, menu arrays, navigation graphs, or side-drawer configurations. Infer the user journey from the main screen to the new component and generate the step-by-step path array.
-10. Features Array (Modifications):
-    - In "single_feature" mode: Extract 2-4 key sub-capabilities/sub-actions of this single main feature. Each item must have a category (e.g., "CAPABILITY"), title, description, and icon_hint.
-    - In "multi_feature" mode: Exhaustively list EVERY single commit modification as an item in "features" (1-to-1 mapping with the Commit Messages). Each item must include:
+9. Features Array (Exhaustive & Accurate Fetching):
+    - Exhaustively list EVERY distinct feature, capability, enhancement, and bug fix found in the Diff and Commit Messages as a separate item in "features".
+    - Each item must include:
       - "category": A status badge string ("NEW", "FIX", "POLISH", "PERF", "REFACTOR", "SECURITY"). Use "FIX" for bug fixes.
-      - "title": A bold, concise change title in plain English.
-      - "description": A 1-2 sentence description of the change.
+      - "title": A bold, concise change title in easy-to-understand, friendly English.
+      - "description": A 1-2 sentence description explaining the benefit in simple everyday language.
       - "icon_hint": name of a standard icon (e.g., 'plus', 'edit', 'trash', 'check', 'zap', 'shield', 'eye', 'tool', 'bug', 'folder', 'star', 'sparkles', 'layers').
-11. Important Note/Warning Banner: If there are any breaking changes or deprecations related to this commit, output a warning string in "warning_note". If there are none, output null.
+10. Important Note/Warning Banner: If there are any breaking changes or deprecations related to this commit, output a warning string in "warning_note". If there are none, output null.
 
 Enforce this strict JSON output schema:
 {{
@@ -457,10 +508,10 @@ Enforce this strict JSON output schema:
   ]
 }}
 
-Here are the Commit Messages for this comparison (IMPORTANT: Every commit below MUST correspond to exactly ONE item in "features", including all bug fixes and download features, without splitting any commit into multiple items):
+Here are the Commit Messages for this comparison:
 {commit_messages_text}
 
-Here is the diff:
+Here is the diff (IMPORTANT: Extract every distinct new feature, capability, and bug fix from this diff into its own separate item in "features"):
 {diff_text}
 """
         candidate_models = [
@@ -541,6 +592,26 @@ Here is the diff:
                 if not isinstance(features_list, list):
                     features_list = []
 
+                # If multiple commit messages exist and some commits were omitted, append them
+                if len(commit_messages) > 1 and len(features_list) < len(commit_messages):
+                    existing_titles = [str(f.get("title", "")).lower() for f in features_list if isinstance(f, dict)]
+                    for idx, msg in enumerate(commit_messages, 1):
+                        title_first = msg.split('\n')[0].strip()
+                        clean_title = re.sub(r'^(feat|fix|docs|style|refactor|perf|test|chore)(\([^)]+\))?:\s*', '', title_first, flags=re.IGNORECASE).strip().capitalize()
+                        if clean_title and not any(clean_title.lower()[:12] in et for et in existing_titles):
+                            category = "FIX" if any(k in title_first.lower() for k in ["fix", "bug", "patch", "error", "issue"]) else (
+                                       "PERF" if any(k in title_first.lower() for k in ["perf", "speed", "fast", "optimiz"]) else (
+                                       "SECURITY" if any(k in title_first.lower() for k in ["sec", "auth", "lock", "shield"]) else "NEW"))
+                            icon_hint = "bug" if category == "FIX" else ("zap" if category == "PERF" else "sparkles")
+                            features_list.append({
+                                "category": category,
+                                "title": clean_title if len(clean_title) >= 3 else f"Feature {idx}",
+                                "description": f"New capabilities and enhancements for {clean_title.lower()}.",
+                                "icon_hint": icon_hint
+                            })
+
+                data["features"] = features_list
+
                 if not data.get("update_type") or str(data.get("update_type")).strip().lower() not in ["single_feature", "multi_feature"]:
                     if len(features_list) >= 2:
                         data["update_type"] = "multi_feature"
@@ -555,6 +626,7 @@ Here is the diff:
                 data["app_owner"] = owner
                 data["app_repo"] = repo
                 data["app_avatar"] = app_logo_b64 or f"https://github.com/{owner}.png"
+                data["app_palette"] = app_palette
 
                 return json.dumps(data)
             except Exception as e:
