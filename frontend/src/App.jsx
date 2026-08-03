@@ -1,10 +1,12 @@
 import React, { useState, useRef } from 'react';
 import { toPng } from 'html-to-image';
-import { Download, Loader2, Code, AlertTriangle, X, Sparkles, Zap, GitCompare, Upload, Share2, Info, AlertCircle } from 'lucide-react';
+import { Download, Loader2, Code, AlertTriangle, X, Sparkles, Zap, GitCompare, Upload, Share2, Info, AlertCircle, HelpCircle } from 'lucide-react';
 import Poster from './components/Poster';
 import LoadingPoster from './components/LoadingPoster';
 import ShareModal from './components/ShareModal';
 import FeatureSelectModal from './components/FeatureSelectModal';
+import AboutModal from './components/AboutModal';
+import HowToUseModal from './components/HowToUseModal';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -75,6 +77,8 @@ function App() {
   const [shareToastMessage, setShareToastMessage] = useState('');
   const [isFeatureSelectModalOpen, setIsFeatureSelectModalOpen] = useState(false);
   const [pendingFetchedData, setPendingFetchedData] = useState(null);
+  const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
+  const [isHowToUseModalOpen, setIsHowToUseModalOpen] = useState(false);
   
   const posterRef = useRef(null);
 
@@ -234,6 +238,8 @@ function App() {
             transform: 'scale(1)',
             transformOrigin: 'top left',
             margin: '0',
+            borderRadius: '0px',
+            overflow: 'hidden',
           }
         });
         const link = document.createElement('a');
@@ -274,6 +280,8 @@ function App() {
           transform: 'scale(1)',
           transformOrigin: 'top left',
           margin: '0',
+          borderRadius: '0px',
+          overflow: 'hidden',
         }
       });
       setShareImageUrl(dataUrl);
@@ -580,7 +588,7 @@ function App() {
       </main>
 
       {/* Footer underneath, center aligned */}
-      <footer className="w-full max-w-4xl mx-auto relative z-10 pt-8 pb-10 border-t border-white/10 text-center flex flex-col items-center justify-center gap-4 text-white/60 animate-fade-in">
+      <footer className="w-full max-w-4xl mx-auto relative z-10 pt-8 pb-10 border-t border-white/10 text-center flex flex-col items-center justify-center gap-4 text-white/60 animate-fade-in px-4">
         <div className="flex items-center justify-center gap-2 text-white font-bold text-lg tracking-tight">
           <Code className="w-5 h-5 text-white" />
           <span>UpToDate</span>
@@ -635,6 +643,26 @@ function App() {
             <InstagramIcon className="w-5 h-5" />
           </a>
         </div>
+
+        {/* Right Corner Buttons on Same Row at Bottom Footer Side */}
+        <div className="w-full flex items-center justify-end gap-3 pt-2 sm:pt-0 sm:absolute sm:bottom-8 sm:right-4 md:right-0">
+          <button
+            type="button"
+            onClick={() => setIsAboutModalOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 hover:border-white/30 text-white/80 hover:text-white text-xs font-semibold transition-all shadow-sm group cursor-pointer"
+          >
+            <Info className="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform" />
+            <span>About This Tool</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsHowToUseModalOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 hover:border-white/30 text-white/80 hover:text-white text-xs font-semibold transition-all shadow-sm group cursor-pointer"
+          >
+            <HelpCircle className="w-4 h-4 text-purple-400 group-hover:scale-110 transition-transform" />
+            <span>How To Use</span>
+          </button>
+        </div>
       </footer>
 
       {/* Share Toast Notification */}
@@ -662,6 +690,16 @@ function App() {
         onContinue={handleFeatureSelectContinue}
         onClear={() => {}}
         onClose={() => setIsFeatureSelectModalOpen(false)}
+      />
+
+      {/* Footer Modals */}
+      <AboutModal
+        isOpen={isAboutModalOpen}
+        onClose={() => setIsAboutModalOpen(false)}
+      />
+      <HowToUseModal
+        isOpen={isHowToUseModalOpen}
+        onClose={() => setIsHowToUseModalOpen(false)}
       />
     </div>
   );

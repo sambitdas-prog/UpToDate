@@ -151,7 +151,7 @@ const Poster = React.forwardRef(({ data }, ref) => {
     return (
       <div 
         ref={ref}
-        className="w-[640px] h-[960px] flex items-center justify-center bg-[#050505] border border-white/10 rounded-3xl shadow-[0_16px_50px_rgba(0,0,0,0.9)] relative overflow-hidden p-12"
+        className="w-[640px] h-[960px] flex items-center justify-center bg-[#050505] border border-white/10 rounded-none shadow-[0_16px_50px_rgba(0,0,0,0.9)] relative overflow-hidden p-12"
       >
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.03)_0%,transparent_60%)] pointer-events-none"></div>
         <div 
@@ -170,7 +170,7 @@ const Poster = React.forwardRef(({ data }, ref) => {
     return (
       <div 
         ref={ref}
-        className="w-[640px] h-[960px] flex flex-col items-center justify-center bg-[#050505] border border-cyan-500/20 rounded-3xl shadow-[0_16px_50px_rgba(0,0,0,0.9)] relative overflow-hidden p-12 text-center"
+        className="w-[640px] h-[960px] flex flex-col items-center justify-center bg-[#050505] border border-cyan-500/20 rounded-none shadow-[0_16px_50px_rgba(0,0,0,0.9)] relative overflow-hidden p-12 text-center"
       >
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(6,182,212,0.1)_0%,transparent_60%)] pointer-events-none"></div>
         <div 
@@ -263,7 +263,7 @@ const Poster = React.forwardRef(({ data }, ref) => {
 
       <div 
         ref={ref}
-        className="w-[640px] min-h-[960px] border border-white/15 rounded-3xl p-7 flex flex-col justify-between relative font-sans shadow-[0_20px_60px_rgba(0,0,0,0.95)] overflow-hidden text-left"
+        className="w-[640px] min-h-[960px] border border-white/15 rounded-none p-7 flex flex-col justify-between relative font-sans shadow-[0_20px_60px_rgba(0,0,0,0.95)] overflow-hidden text-left"
         style={{ 
           background: `radial-gradient(circle at 12% 10%, ${hexToRgba(primaryColor, 0.22)} 0%, transparent 42%), radial-gradient(circle at 88% 90%, ${hexToRgba(secondaryColor, 0.18)} 0%, transparent 45%), linear-gradient(165deg, #0d0f17 0%, #08090e 50%, #050609 100%)`,
           '--brand-color': primaryColor
