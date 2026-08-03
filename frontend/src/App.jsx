@@ -202,9 +202,10 @@ function App() {
     }
   };
 
-  const handleFeatureSelectContinue = (selectedIndices) => {
+  const handleFeatureSelectContinue = (selectedIndices, modifiedFeatures) => {
     if (!pendingFetchedData) return;
-    const selectedFeatures = pendingFetchedData.features.filter((_, idx) =>
+    const allFeatures = modifiedFeatures || pendingFetchedData.features;
+    const selectedFeatures = allFeatures.filter((_, idx) =>
       selectedIndices.includes(idx)
     );
     const updatedData = {
@@ -333,8 +334,10 @@ function App() {
       )}
 
       {/* Background Flares / Light Reflections */}
-      <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-white/10 rounded-full blur-[128px] pointer-events-none animate-pulse" style={{ animationDuration: '6s' }}></div>
-      <div className="absolute bottom-1/4 right-1/4 w-[600px] h-[600px] bg-white/5 rounded-full blur-[128px] pointer-events-none animate-pulse" style={{ animationDuration: '8s', animationDelay: '1s' }}></div>
+      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+        <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-white/10 rounded-full blur-[128px] animate-pulse" style={{ animationDuration: '6s' }}></div>
+        <div className="absolute bottom-1/4 right-1/4 w-[600px] h-[600px] bg-white/5 rounded-full blur-[128px] animate-pulse" style={{ animationDuration: '8s', animationDelay: '1s' }}></div>
+      </div>
 
       {/* Main Container Area (Transitions between Split Screen Layouts) */}
       <main className="w-full min-h-screen flex items-center justify-center p-4 md:p-8 relative z-10">

@@ -41,11 +41,29 @@ export default function FeatureSelectModal({
   onClose,
 }) {
   const [selectedIndices, setSelectedIndices] = useState([]);
+  const [customFeatures, setCustomFeatures] = useState([]);
 
   // When modal opens or features list updates, select all features by default
   useEffect(() => {
     if (isOpen && features && features.length > 0) {
       setSelectedIndices(features.map((_, i) => i));
+      setCustomFeatures(
+        features.map((f) => {
+          if (f && typeof f === 'object') {
+            return {
+              ...f,
+              title: String(f.title || ''),
+              description: String(f.description || ''),
+            };
+          }
+          return {
+            title: String(f || ''),
+            description: '',
+            category: 'NEW',
+            icon_hint: 'check',
+          };
+        })
+      );
     }
   }, [isOpen, features]);
 
@@ -70,7 +88,7 @@ export default function FeatureSelectModal({
 
   const handleContinue = () => {
     if (selectedIndices.length === 0) return;
-    onContinue(selectedIndices);
+    onContinue(selectedIndices, customFeatures);
   };
 
   return (
@@ -91,7 +109,7 @@ export default function FeatureSelectModal({
                 <Sparkles className="w-4 h-4 text-white/80" />
               </h3>
               <p className="text-xs md:text-sm text-white/60 mt-0.5">
-                We fetched <span className="text-white font-semibold">{features.length}</span> features from your commits. Choose which ones to keep in your poster:
+                We fetched <span className="text-white font-semibold">{features.length}</span> features from your commits. Choose which ones to keep in your release:
               </p>
             </div>
           </div>
@@ -119,11 +137,12 @@ export default function FeatureSelectModal({
         <div className="flex-1 overflow-y-auto px-2.5 py-1 -mx-2.5 flex flex-col gap-3 max-h-[52vh] custom-scrollbar">
           {features.map((feature, idx) => {
             const isSelected = selectedIndices.includes(idx);
-            const isObject = feature && typeof feature === 'object';
-            const title = isObject ? String(feature.title || '') : String(feature || '');
-            const description = isObject ? String(feature.description || '') : '';
-            const category = isObject ? String(feature.category || 'NEW').toUpperCase() : 'NEW';
-            const hint = isObject && feature.icon_hint ? String(feature.icon_hint).toLowerCase() : 'check';
+            const item = customFeatures[idx] || feature;
+            const isObject = item && typeof item === 'object';
+            const title = isObject ? String(item.title || '') : String(item || '');
+            const description = isObject ? String(item.description || '') : '';
+            const category = isObject ? String(item.category || 'NEW').toUpperCase() : 'NEW';
+            const hint = isObject && item.icon_hint ? String(item.icon_hint).toLowerCase() : 'check';
             const IconComponent = IconMap[hint] || CheckCircle2;
             const badgeColor = categoryColors[category] || '#22d3ee';
 
@@ -161,15 +180,41 @@ export default function FeatureSelectModal({
 
                 {/* Title & Description Row Content */}
                 <div className="flex-1 min-w-0 text-left">
-                  <h4 className={`text-sm font-bold leading-snug tracking-tight mb-1 ${
-                    isSelected ? 'text-white' : 'text-white/95'
-                  }`}>
+                  <h4
+                    contentEditable="plaintext-only"
+                    suppressContentEditableWarning={true}
+                    onClick={(e) => e.stopPropagation()}
+                    onBlur={(e) => {
+                      const newTitle = e.currentTarget.textContent.trim() || title;
+                      setCustomFeatures((prev) => {
+                        const next = [...prev];
+                        next[idx] = { ...next[idx], title: newTitle };
+                        return next;
+                      });
+                    }}
+                    className={`text-sm font-bold leading-snug tracking-tight mb-1 outline-none focus:bg-white/10 focus:ring-1 focus:ring-white/40 rounded px-1 -ml-1 transition-all cursor-text ${
+                      isSelected ? 'text-white' : 'text-white/95'
+                    }`}
+                  >
                     {title}
                   </h4>
                   {description && (
-                    <p className={`text-xs leading-relaxed ${
-                      isSelected ? 'text-white/80' : 'text-white/75'
-                    }`}>
+                    <p
+                      contentEditable="plaintext-only"
+                      suppressContentEditableWarning={true}
+                      onClick={(e) => e.stopPropagation()}
+                      onBlur={(e) => {
+                        const newDesc = e.currentTarget.textContent.trim();
+                        setCustomFeatures((prev) => {
+                          const next = [...prev];
+                          next[idx] = { ...next[idx], description: newDesc };
+                          return next;
+                        });
+                      }}
+                      className={`text-xs leading-relaxed outline-none focus:bg-white/10 focus:ring-1 focus:ring-white/40 rounded px-1 -ml-1 transition-all cursor-text ${
+                        isSelected ? 'text-white/80' : 'text-white/75'
+                      }`}
+                    >
                       {description}
                     </p>
                   )}

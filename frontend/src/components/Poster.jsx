@@ -54,23 +54,64 @@ const Poster = React.forwardRef(({ data }, ref) => {
   const [removedIndices, setRemovedIndices] = useState([]);
   const [hideNavSection, setHideNavSection] = useState(false);
   const [hideWarningNote, setHideWarningNote] = useState(false);
+  const [manualNoteAdded, setManualNoteAdded] = useState(false);
+  const [customNoteText, setCustomNoteText] = useState('');
   const [customHeadline, setCustomHeadline] = useState('');
   const [customSubheadline, setCustomSubheadline] = useState('');
+  const [customAppName, setCustomAppName] = useState('');
+  const [customNavSteps, setCustomNavSteps] = useState([]);
 
   useEffect(() => {
     setImgError(false);
   }, [data?.app_avatar]);
 
   useEffect(() => {
+    const rawNote = data?.warning_note || data?.important_note || data?.relocation_notice;
+    if (rawNote) {
+      const clean = typeof rawNote === 'string' ? rawNote.replace(/^(?:Important )?Note:\s*/i, '') : String(rawNote);
+      setCustomNoteText(clean);
+      setManualNoteAdded(false);
+    } else {
+      setCustomNoteText('');
+      setManualNoteAdded(false);
+    }
+  }, [data?.warning_note, data?.important_note, data?.relocation_notice]);
+
+  useEffect(() => {
     setRemovedIndices([]);
     setHideNavSection(false);
     setHideWarningNote(false);
+    setManualNoteAdded(false);
   }, [data?.features, data?.navigation_path, data?.warning_note, data?.important_note, data?.relocation_notice]);
 
   useEffect(() => {
     setCustomHeadline(data?.headline || data?.title || "Weekly Release Update");
     setCustomSubheadline(String(data?.subheadline || (typeof data?.what_is_it === 'string' ? data.what_is_it : (typeof data?.summary === 'string' ? data.summary : '')) || ''));
   }, [data?.headline, data?.title, data?.subheadline, data?.what_is_it, data?.summary]);
+
+  const formatAppNameHelper = (name, repo) => {
+    if (name && typeof name === 'string' && !['app', 'application', 'unknown', 'untitled', 'release update', 'git diff', 'update', 'release', 'aether'].includes(name.trim().toLowerCase())) {
+      return name.trim();
+    }
+    if (repo && typeof repo === 'string') {
+      return repo.replace(/[-_]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    }
+    return 'Application Update';
+  };
+
+  useEffect(() => {
+    setCustomAppName(formatAppNameHelper(data?.app_name, data?.app_repo));
+  }, [data?.app_name, data?.app_repo]);
+
+  useEffect(() => {
+    let steps = [];
+    if (Array.isArray(data?.navigation_path)) {
+      steps = data.navigation_path.filter(Boolean).map(s => String(s));
+    } else if (typeof data?.navigation_path === 'string') {
+      steps = data.navigation_path.split(/->|→|>|:/).map(s => s.trim()).filter(Boolean);
+    }
+    setCustomNavSteps(steps);
+  }, [data?.navigation_path]);
 
   useEffect(() => {
     if (data?.app_palette && Array.isArray(data.app_palette) && data.app_palette.length > 0) {
@@ -150,28 +191,14 @@ const Poster = React.forwardRef(({ data }, ref) => {
     );
   }
 
-  const formatAppName = (name, repo) => {
-    if (name && typeof name === 'string' && !['app', 'application', 'unknown', 'untitled', 'release update', 'git diff', 'update', 'release', 'aether'].includes(name.trim().toLowerCase())) {
-      return name.trim();
-    }
-    if (repo && typeof repo === 'string') {
-      return repo.replace(/[-_]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-    }
-    return 'Application Update';
-  };
-
-  const appName = formatAppName(data.app_name, data.app_repo);
+  const appName = customAppName || formatAppNameHelper(data.app_name, data.app_repo);
   const avatarUrl = data.app_avatar;
   const rawFeatures = Array.isArray(data.features) ? data.features : [];
   const features = rawFeatures
     .map((f, originalIndex) => ({ item: f, originalIndex }))
     .filter(({ item, originalIndex }) => item !== null && item !== undefined && !removedIndices.includes(originalIndex));
   const explanationText = typeof data.what_is_it === 'string' ? data.what_is_it : (typeof data.summary === 'string' ? data.summary : '');
-  const navSteps = Array.isArray(data.navigation_path)
-    ? data.navigation_path.filter(Boolean).map(s => String(s))
-    : (typeof data.navigation_path === 'string'
-        ? data.navigation_path.split(/->|→|>|:/).map(s => s.trim()).filter(Boolean)
-        : null);
+  const navSteps = customNavSteps;
 
   const isMultiFeature = data.update_type === 'multi_feature' || 
     (!data.update_type && features.length >= 2);
@@ -179,15 +206,69 @@ const Poster = React.forwardRef(({ data }, ref) => {
   const primaryColor = brandColors[0] || '#3B82F6';
   const secondaryColor = brandColors.length > 1 ? brandColors[1] : primaryColor;
 
+  const autoNote = data?.warning_note || data?.important_note || data?.relocation_notice;
+  const isAutoFetchedNote = Boolean(autoNote);
+  const isNoteVisible = !hideWarningNote && (isAutoFetchedNote || manualNoteAdded);
+
+  const handleAddManualNote = () => {
+    if (isNoteVisible) return;
+    setManualNoteAdded(true);
+    setHideWarningNote(false);
+    if (!customNoteText) {
+      setCustomNoteText('Type important note here...');
+    }
+    setTimeout(() => {
+      const el = document.querySelector('[data-important-note-edit]');
+      if (el) {
+        el.focus();
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    }, 50);
+  };
+
   return (
-    <div 
-      ref={ref}
-      className="w-[640px] min-h-[960px] border border-white/15 rounded-3xl p-7 flex flex-col justify-between relative font-sans shadow-[0_20px_60px_rgba(0,0,0,0.95)] overflow-hidden text-left"
-      style={{ 
-        background: `radial-gradient(circle at 12% 10%, ${hexToRgba(primaryColor, 0.22)} 0%, transparent 42%), radial-gradient(circle at 88% 90%, ${hexToRgba(secondaryColor, 0.18)} 0%, transparent 45%), linear-gradient(165deg, #0d0f17 0%, #08090e 50%, #050609 100%)`,
-        '--brand-color': primaryColor
-      }}
-    >
+    <div className="relative w-[640px]">
+      {/* Floating Add Important Notes Button (outside poster container so it scrolls with it and is ignored by PNG export) */}
+      <button
+        type="button"
+        onClick={handleAddManualNote}
+        disabled={isNoteVisible}
+        title={
+          isNoteVisible
+            ? "Important Notes section is already added"
+            : "Add Important Notes section manually"
+        }
+        data-html2canvas-ignore="true"
+        className={`group/float absolute -left-12 sm:-left-14 md:-left-16 bottom-28 z-40 flex items-center gap-2 h-10 rounded-full px-3 transition-all duration-300 shadow-xl border ${
+          isNoteVisible
+            ? 'bg-zinc-800 border-zinc-700/60 text-zinc-500 cursor-not-allowed opacity-60 pointer-events-none'
+            : 'bg-white hover:bg-amber-500/20 border-white/40 hover:border-amber-500/50 text-black hover:text-amber-300 hover:shadow-[0_0_25px_rgba(245,158,11,0.35)] cursor-pointer'
+        }`}
+      >
+        <span className={`w-5 h-5 rounded-full flex items-center justify-center font-serif italic font-extrabold text-sm shrink-0 transition-colors ${
+          isNoteVisible
+            ? 'bg-zinc-700/50 text-zinc-500'
+            : 'bg-black group-hover/float:bg-amber-500 text-white group-hover/float:text-black'
+        }`}>
+          i
+        </span>
+        <span className="max-w-0 overflow-hidden whitespace-nowrap group-hover/float:max-w-xs transition-all duration-300 ease-in-out text-xs font-bold tracking-tight">
+          Add Important Notes
+        </span>
+      </button>
+
+      <div 
+        ref={ref}
+        className="w-[640px] min-h-[960px] border border-white/15 rounded-3xl p-7 flex flex-col justify-between relative font-sans shadow-[0_20px_60px_rgba(0,0,0,0.95)] overflow-hidden text-left"
+        style={{ 
+          background: `radial-gradient(circle at 12% 10%, ${hexToRgba(primaryColor, 0.22)} 0%, transparent 42%), radial-gradient(circle at 88% 90%, ${hexToRgba(secondaryColor, 0.18)} 0%, transparent 45%), linear-gradient(165deg, #0d0f17 0%, #08090e 50%, #050609 100%)`,
+          '--brand-color': primaryColor
+        }}
+      >
       {/* Subtle Grid Overlay */}
       <div 
         className="absolute inset-0 pointer-events-none opacity-[0.03]"
@@ -222,7 +303,15 @@ const Poster = React.forwardRef(({ data }, ref) => {
           </div>
           <div>
             <div className="text-[10px] font-bold text-white/70 uppercase tracking-widest">APPLICATION</div>
-            <div className="text-xl font-extrabold text-white tracking-tight drop-shadow-sm">{appName}</div>
+            <div
+              contentEditable="plaintext-only"
+              suppressContentEditableWarning={true}
+              onBlur={(e) => setCustomAppName(e.currentTarget.textContent.trim() || appName)}
+              className="text-xl font-extrabold text-white tracking-tight drop-shadow-sm outline-none focus:bg-white/10 focus:ring-1 focus:ring-white/40 rounded px-1 -ml-1 transition-all cursor-text"
+              title="Click to edit application name"
+            >
+              {appName}
+            </div>
           </div>
         </div>
 
@@ -436,12 +525,26 @@ const Poster = React.forwardRef(({ data }, ref) => {
               return (
                 <React.Fragment key={sIdx}>
                   <div 
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shadow-sm ${
+                    className={`group/step relative flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shadow-sm ${
                       isLast 
                         ? 'text-white bg-white/[0.12] border-white/25 shadow-md' 
                         : 'text-white/80 bg-white/[0.04] border-white/10'
                     }`}
                   >
+                    {/* Hover close button to delete this step */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCustomNavSteps(prev => prev.filter((_, i) => i !== sIdx));
+                      }}
+                      title="Remove step"
+                      data-html2canvas-ignore="true"
+                      className="absolute -top-1.5 -right-1.5 z-20 w-4 h-4 rounded-full bg-black/85 hover:bg-red-500 border border-white/20 text-white/80 hover:text-white flex items-center justify-center opacity-0 group-hover/step:opacity-100 transition-opacity cursor-pointer shadow"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+
                     {/* Step Index Pill */}
                     <span 
                       className="flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-mono font-black shrink-0"
@@ -453,8 +556,46 @@ const Poster = React.forwardRef(({ data }, ref) => {
                       {sIdx + 1}
                     </span>
 
-                    {/* Step Title */}
-                    <span className="tracking-tight text-white">{step}</span>
+                    {/* Editable Step Title */}
+                    <span
+                      contentEditable="plaintext-only"
+                      suppressContentEditableWarning={true}
+                      data-step-index={sIdx}
+                      onKeyDown={(e) => {
+                        if (e.key === ',' || e.key === 'Enter' || (e.key === 'ArrowRight' && (e.ctrlKey || e.metaKey))) {
+                          e.preventDefault();
+                          const currentVal = e.currentTarget.textContent.trim() || 'Step';
+                          setCustomNavSteps(prev => {
+                            const next = [...prev];
+                            next[sIdx] = currentVal;
+                            next.splice(sIdx + 1, 0, 'New Step');
+                            return next;
+                          });
+                          setTimeout(() => {
+                            const el = document.querySelector(`[data-step-index="${sIdx + 1}"]`);
+                            if (el) {
+                              el.focus();
+                              const range = document.createRange();
+                              range.selectNodeContents(el);
+                              const sel = window.getSelection();
+                              sel.removeAllRanges();
+                              sel.addRange(range);
+                            }
+                          }, 30);
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const val = e.currentTarget.textContent.trim() || 'Step';
+                        setCustomNavSteps(prev => {
+                          const next = [...prev];
+                          next[sIdx] = val;
+                          return next;
+                        });
+                      }}
+                      className="tracking-tight text-white outline-none focus:bg-white/10 focus:ring-1 focus:ring-white/40 rounded px-1 -ml-1 transition-all cursor-text"
+                    >
+                      {step}
+                    </span>
 
                     {/* Target Pin on Final Step */}
                     {isLast && (
@@ -474,40 +615,43 @@ const Poster = React.forwardRef(({ data }, ref) => {
         </div>
       )}
 
-      {/* WARNING NOTE (IF PRESENT) */}
-      {(() => {
-        const rawNote = data.warning_note || data.important_note || data.relocation_notice;
-        if (!rawNote || hideWarningNote) return null;
-        const noteText = typeof rawNote === 'string'
-          ? rawNote.replace(/^(?:Important )?Note:\s*/i, '')
-          : String(rawNote);
+      {/* WARNING NOTE (IF PRESENT OR ADDED MANUALLY) */}
+      {!hideWarningNote && (isAutoFetchedNote || manualNoteAdded) && (
+        <div className="group relative z-10 w-full my-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 shadow-lg flex items-start gap-2.5 transition-all">
+          {/* Hover Close Button (ignored by PNG export) */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setHideWarningNote(true);
+              setManualNoteAdded(false);
+            }}
+            title="Remove 'Important Note' section from poster"
+            data-html2canvas-ignore="true"
+            className="absolute top-2 right-2 z-20 w-6 h-6 rounded-full bg-black/70 hover:bg-red-500/90 border border-white/15 hover:border-red-400 text-white/70 hover:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 cursor-pointer shadow-md"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
 
-        return (
-          <div className="group relative z-10 w-full my-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 shadow-lg flex items-start gap-2.5 transition-all">
-            {/* Hover Close Button (ignored by PNG export) */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setHideWarningNote(true);
-              }}
-              title="Remove 'Important Note' section from poster"
-              data-html2canvas-ignore="true"
-              className="absolute top-2 right-2 z-20 w-6 h-6 rounded-full bg-black/70 hover:bg-red-500/90 border border-white/15 hover:border-red-400 text-white/70 hover:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 cursor-pointer shadow-md"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-
-            <div className="p-1 rounded-lg bg-amber-500/20 text-amber-400 shrink-0 mt-0.5">
-              <AlertTriangle className="w-3.5 h-3.5" />
-            </div>
-            <div className="flex-1 text-xs font-medium leading-relaxed pr-6">
-              <span className="font-bold text-amber-300 mr-1.5">Important Note:</span>
-              {noteText}
-            </div>
+          <div className="p-1 rounded-lg bg-amber-500/20 text-amber-400 shrink-0 mt-0.5">
+            <AlertTriangle className="w-3.5 h-3.5" />
           </div>
-        );
-      })()}
+          <div className="flex-1 text-xs font-medium leading-relaxed pr-6">
+            <span className="font-bold text-amber-300 mr-1.5">Important Note:</span>
+            <span
+              contentEditable="plaintext-only"
+              suppressContentEditableWarning={true}
+              data-important-note-edit
+              onBlur={(e) => {
+                setCustomNoteText(e.currentTarget.textContent.trim());
+              }}
+              className="outline-none focus:bg-amber-500/10 focus:ring-1 focus:ring-amber-400/50 rounded px-1 -ml-1 transition-all cursor-text text-amber-200"
+            >
+              {customNoteText || (isAutoFetchedNote ? '' : 'Type important note here...')}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* FOOTER */}
       <div className="relative z-10 mt-4 pt-3.5 border-t border-white/10 flex justify-between items-center text-white/60">
@@ -520,6 +664,7 @@ const Poster = React.forwardRef(({ data }, ref) => {
           Generated with <span className="font-bold text-white/90">UpToDate</span> • {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
         </div>
       </div>
+    </div>
     </div>
   );
 });
