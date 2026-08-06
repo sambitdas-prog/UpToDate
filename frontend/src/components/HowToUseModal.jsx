@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, HelpCircle, GitBranch, Sparkles, Sliders, Share2, Lightbulb } from 'lucide-react';
+import { X, HelpCircle, GitBranch, Sparkles, Share2, Lightbulb, Edit3 } from 'lucide-react';
 
 export default function HowToUseModal({ isOpen, onClose }) {
   const [isClosing, setIsClosing] = useState(false);
@@ -57,7 +57,7 @@ export default function HowToUseModal({ isOpen, onClose }) {
                 How To Use This Tool
               </h3>
               <p className="text-xs md:text-sm text-white/60 mt-0.5">
-                A simple step-by-step guide to generating your release posters.
+                A simple step-by-step guide to generating, customizing, and sharing your release posters.
               </p>
             </div>
           </div>
@@ -88,14 +88,14 @@ export default function HowToUseModal({ isOpen, onClose }) {
                 </div>
               </div>
               <p className="text-white/70 text-xs md:text-sm leading-relaxed pl-10">
-                You can generate release posters using two simple modes:
+                You can analyze your repository updates using two simple modes:
               </p>
               <ul className="pl-10 space-y-1.5 text-xs text-white/60 list-disc list-inside">
                 <li>
-                  <strong className="text-white/90">Auto Mode:</strong> Paste any public GitHub repository link (e.g., <code className="bg-white/10 px-1.5 py-0.5 rounded text-purple-300 font-mono">https://github.com/facebook/react</code>).
+                  <strong className="text-white/90">Auto-Detection Mode:</strong> Paste any public GitHub repository URL (e.g., <code className="bg-white/10 px-1.5 py-0.5 rounded text-purple-300 font-mono">https://github.com/facebook/react</code>). UpToDate automatically analyzes recent commits on the default branch.
                 </li>
                 <li>
-                  <strong className="text-white/90">Manual Mode:</strong> Compare two Git branches (like <code className="bg-white/10 px-1 py-0.5 rounded text-purple-300 font-mono">main</code> vs <code className="bg-white/10 px-1 py-0.5 rounded text-purple-300 font-mono">develop</code>) or upload screenshots of your commit history.
+                  <strong className="text-white/90">Compare Branches Mode:</strong> Specify your custom <strong className="text-white/90">Base Branch</strong> (e.g., <code className="bg-white/10 px-1 py-0.5 rounded text-purple-300 font-mono">main</code>) and <strong className="text-white/90">Compare Branch</strong> (e.g., <code className="bg-white/10 px-1 py-0.5 rounded text-purple-300 font-mono">develop</code>) to extract specific commit diffs.
                 </li>
               </ul>
             </div>
@@ -108,12 +108,16 @@ export default function HowToUseModal({ isOpen, onClose }) {
                 </span>
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4" />
-                  <h4>Generate Release Highlights</h4>
+                  <h4>Analyze & Select Features</h4>
                 </div>
               </div>
               <p className="text-white/70 text-xs md:text-sm leading-relaxed pl-10">
-                Click the <strong className="text-white">"Generate Release Poster"</strong> button. The tool automatically analyzes code commits and categorizes changes into clear groups: <span className="text-cyan-300 font-medium">New Features</span>, <span className="text-red-300 font-medium">Bug Fixes</span>, <span className="text-purple-300 font-medium">Performance</span>, and <span className="text-amber-300 font-medium">Security Updates</span>.
+                Click <strong className="text-white">"Analyze Codebase"</strong>. Algorithm extracts commit highlights and groups them into clean categories: <span className="text-cyan-300 font-medium">NEW</span>, <span className="text-red-300 font-medium">FIX</span>, <span className="text-purple-300 font-medium">PERF</span>, <span className="text-blue-300 font-medium">POLISH</span>, <span className="text-amber-300 font-medium">SECURITY</span>, and <span className="text-emerald-300 font-medium">REFACTOR</span>.
               </p>
+              <ul className="pl-10 space-y-1.5 text-xs text-white/60 list-disc list-inside">
+                <li>Check or uncheck features in the popup modal to choose what updates appear on your poster.</li>
+                <li>Directly edit feature titles and descriptions right inside the selection modal before proceeding.</li>
+              </ul>
             </div>
 
             {/* Step 3 */}
@@ -123,17 +127,23 @@ export default function HowToUseModal({ isOpen, onClose }) {
                   3
                 </span>
                 <div className="flex items-center gap-2">
-                  <Sliders className="w-4 h-4" />
-                  <h4>Customize Features & Style</h4>
+                  <Edit3 className="w-4 h-4" />
+                  <h4>Customize Poster Canvas</h4>
                 </div>
               </div>
               <p className="text-white/70 text-xs md:text-sm leading-relaxed pl-10">
-                In the feature selection popup:
+                Fine-tune your generated poster in real-time split view:
               </p>
               <ul className="pl-10 space-y-1.5 text-xs text-white/60 list-disc list-inside">
-                <li>Check or uncheck features to select what appears on the poster.</li>
-                <li>Edit version numbers, project title, and tagline.</li>
-                <li>Select from visual themes (Dark Modern, Minimalist, Cyberpunk, etc.).</li>
+                <li>
+                  <strong className="text-white/90">Inline Text Editing:</strong> Click directly on poster elements (App Title, Version Headline, Subheadline, Navigation Steps, or Warning Alerts) to edit text on the fly.
+                </li>
+                <li>
+                  <strong className="text-white/90">Import Product Screenshots:</strong> Upload up to 2 product screenshots/mockups to showcase on your poster layout.
+                </li>
+                <li>
+                  <strong className="text-white/90">Undo & Redo History:</strong> Revert or re-apply design changes anytime using <code className="bg-white/10 px-1 py-0.5 rounded text-emerald-300 font-mono">Ctrl + Z</code> and <code className="bg-white/10 px-1 py-0.5 rounded text-emerald-300 font-mono">Ctrl + Y</code> or the top action buttons.
+                </li>
               </ul>
             </div>
 
@@ -149,8 +159,16 @@ export default function HowToUseModal({ isOpen, onClose }) {
                 </div>
               </div>
               <p className="text-white/70 text-xs md:text-sm leading-relaxed pl-10">
-                Preview your generated poster in real time! Click <strong className="text-white">"Download Poster"</strong> to save the image file, or click <strong className="text-white">"Share Release Poster"</strong> to copy rich release captions and post directly to LinkedIn, X (Twitter), Facebook, or WhatsApp.
+                Once satisfied with your poster design:
               </p>
+              <ul className="pl-10 space-y-1.5 text-xs text-white/60 list-disc list-inside">
+                <li>
+                  Click <strong className="text-white">"Download Poster (PNG)"</strong> to save a high-resolution 4K image file to your device.
+                </li>
+                <li>
+                  Click <strong className="text-white">"Share"</strong> to open the social sharing modal. UpToDate auto-generates rich release captions, copies the poster image to your clipboard, and lets you post directly to <strong className="text-white/90">LinkedIn</strong>, <strong className="text-white/90">X (Twitter)</strong>, <strong className="text-white/90">WhatsApp</strong>, or <strong className="text-white/90">Facebook</strong>.
+                </li>
+              </ul>
             </div>
 
           </div>
@@ -164,15 +182,19 @@ export default function HowToUseModal({ isOpen, onClose }) {
             <ul className="space-y-2 text-xs text-white/70">
               <li className="flex items-start gap-2">
                 <span className="text-amber-400 font-bold">•</span>
-                <span><strong>Use Descriptive Commit Messages:</strong> Writing clear commit messages helps the tool generate clear and accurate feature bullet points.</span>
+                <span><strong>Descriptive Commit Messages:</strong> Writing clear commit messages helps AI generate precise, human-readable feature summaries and appropriate icons.</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-amber-400 font-bold">•</span>
-                <span><strong>Public GitHub Repos:</strong> Make sure the GitHub URL points to a public repository so the analysis can fetch the commit log.</span>
+                <span><strong>Public Repositories:</strong> Ensure the repository is public so GitHub API and diff fetchers can retrieve recent commits without authentication errors.</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-amber-400 font-bold">•</span>
-                <span><strong>Try Different Themes:</strong> Experiment with visual themes to match your project branding before exporting your poster image.</span>
+                <span><strong>Attach Product Visuals:</strong> Adding 1 or 2 screenshots of your app makes your release poster significantly more engaging on social feeds.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-amber-400 font-bold">•</span>
+                <span><strong>Keyboard Undo/Redo:</strong> Don't worry about accidental edits on the canvas—simply press <code className="bg-white/10 px-1 py-0.5 rounded text-amber-300 font-mono">Ctrl + Z</code> to undo or <code className="bg-white/10 px-1 py-0.5 rounded text-amber-300 font-mono">Ctrl + Y</code> to redo.</span>
               </li>
             </ul>
           </div>
