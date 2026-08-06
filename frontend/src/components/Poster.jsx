@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useImperativeHandle, useCallback, useRef } from 'react';
 import { 
   Sparkles, CheckCircle2, Zap, Shield, Eye, Bug, PenTool, Layout, Box, Star, Layers, 
   Navigation, ChevronRight, AlertTriangle, Compass, MapPin, Plus, Edit3, Trash2, Folder, 
@@ -43,7 +43,7 @@ const hexToRgba = (hex, alpha) => {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
-const Poster = React.forwardRef(({ data }, ref) => {
+const Poster = React.forwardRef(({ data, actionsRef, onHistoryUpdate }, ref) => {
   const [brandColors, setBrandColors] = useState(() => {
     if (data?.app_palette && Array.isArray(data.app_palette) && data.app_palette.length > 0) {
       return data.app_palette;
@@ -61,6 +61,138 @@ const Poster = React.forwardRef(({ data }, ref) => {
   const [customAppName, setCustomAppName] = useState('');
   const [customNavSteps, setCustomNavSteps] = useState([]);
 
+  const historyRef = useRef([]);
+  const historyIndexRef = useRef(-1);
+  const isUndoingRef = useRef(false);
+  const isInitializedRef = useRef(false);
+  const [historyVersion, setHistoryVersion] = useState(0);
+
+  const stateRef = useRef();
+  stateRef.current = {
+    removedIndices, hideNavSection, hideWarningNote, manualNoteAdded,
+    customNoteText, customHeadline, customSubheadline, customAppName, customNavSteps
+  };
+
+  // Initialize history on mount or data change
+  useEffect(() => {
+    isInitializedRef.current = false;
+    const timer = setTimeout(() => {
+      historyRef.current = [stateRef.current];
+      historyIndexRef.current = 0;
+      isUndoingRef.current = false;
+      isInitializedRef.current = true;
+      setHistoryVersion(v => v + 1);
+    }, 500); // Wait for initial hydration to settle
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]); // only reset history when the entire poster data object changes
+
+  // Track state changes
+  useEffect(() => {
+    if (!isInitializedRef.current) return;
+    if (isUndoingRef.current) {
+      isUndoingRef.current = false;
+      return;
+    }
+    
+    const currentSnapshot = stateRef.current;
+    const prevSnapshot = historyRef.current[historyIndexRef.current];
+    if (!prevSnapshot) return;
+
+    if (JSON.stringify(currentSnapshot) !== JSON.stringify(prevSnapshot)) {
+      const newHistory = historyRef.current.slice(0, historyIndexRef.current + 1);
+      newHistory.push(currentSnapshot);
+      historyRef.current = newHistory;
+      historyIndexRef.current = newHistory.length - 1;
+      setHistoryVersion(v => v + 1);
+    }
+  }, [
+    removedIndices, hideNavSection, hideWarningNote, manualNoteAdded,
+    customNoteText, customHeadline, customSubheadline, customAppName, customNavSteps
+  ]);
+
+  const handleUndo = useCallback(() => {
+    if (historyIndexRef.current > 0) {
+      isUndoingRef.current = true;
+      historyIndexRef.current -= 1;
+      const prevState = historyRef.current[historyIndexRef.current];
+
+      setRemovedIndices(prevState.removedIndices);
+      setHideNavSection(prevState.hideNavSection);
+      setHideWarningNote(prevState.hideWarningNote);
+      setManualNoteAdded(prevState.manualNoteAdded);
+      setCustomNoteText(prevState.customNoteText);
+      setCustomHeadline(prevState.customHeadline);
+      setCustomSubheadline(prevState.customSubheadline);
+      setCustomAppName(prevState.customAppName);
+      setCustomNavSteps(prevState.customNavSteps);
+      
+      setHistoryVersion(v => v + 1);
+    }
+  }, []);
+
+  const handleRedo = useCallback(() => {
+    if (historyIndexRef.current < historyRef.current.length - 1) {
+      isUndoingRef.current = true;
+      historyIndexRef.current += 1;
+      const nextState = historyRef.current[historyIndexRef.current];
+
+      setRemovedIndices(nextState.removedIndices);
+      setHideNavSection(nextState.hideNavSection);
+      setHideWarningNote(nextState.hideWarningNote);
+      setManualNoteAdded(nextState.manualNoteAdded);
+      setCustomNoteText(nextState.customNoteText);
+      setCustomHeadline(nextState.customHeadline);
+      setCustomSubheadline(nextState.customSubheadline);
+      setCustomAppName(nextState.customAppName);
+      setCustomNavSteps(nextState.customNavSteps);
+      
+      setHistoryVersion(v => v + 1);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (onHistoryUpdate) {
+      onHistoryUpdate({
+        canUndo: historyIndexRef.current > 0,
+        canRedo: historyIndexRef.current < historyRef.current.length - 1 && historyIndexRef.current !== -1
+      });
+    }
+  }, [historyVersion, onHistoryUpdate]);
+
+  useImperativeHandle(actionsRef, () => ({
+    undo: handleUndo,
+    redo: handleRedo
+  }), [handleUndo, handleRedo]);
+
+  // Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Don't trigger if user is typing in a contenteditable or input
+      if (e.target.isContentEditable || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        return;
+      }
+      
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const cmdKey = isMac ? e.metaKey : e.ctrlKey;
+      
+      if (cmdKey && e.key === 'z') {
+        if (e.shiftKey) {
+          e.preventDefault();
+          handleRedo();
+        } else {
+          e.preventDefault();
+          handleUndo();
+        }
+      } else if (cmdKey && e.key === 'y') {
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleUndo, handleRedo]);
   useEffect(() => {
     setImgError(false);
   }, [data?.app_avatar]);

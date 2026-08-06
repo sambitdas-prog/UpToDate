@@ -33,8 +33,8 @@
 | :--- | :--- | :--- |
 | **Backend** | Python 3.9+ / FastAPI | Async REST API with parallel logo fetching & diff parsing |
 | **AI Engine** | Google Generative AI SDK | Gemini Flash models with strict JSON schema enforcement |
-| **Frontend** | React 19 + Vite | High-performance SPA with smooth transition choreography |
-| **Styling** | Tailwind CSS v3 | Modern glassmorphism UI design with dynamic dark theme |
+| **Frontend** | React 19 + Vite | High-performance tool with smooth transition choreography |
+| **Styling** | Tailwind CSS v3 | Modern and simple sleek UI design with dynamic dark theme |
 | **Icons & UI** | Lucide React | Clean, responsive SVG icon set |
 | **Poster Export** | html-to-image | High-DPI DOM canvas rendering to PNG format |
 

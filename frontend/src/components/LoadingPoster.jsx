@@ -28,13 +28,23 @@ const STAGES = [
     color: "from-emerald-400 to-teal-500",
     glow: "#10b981",
     progress: 95
+  },
+  {
+    id: 4,
+    title: "Writing Tailored Headline & Summary...",
+    detail: "Finalizing content based on your selected features",
+    icon: Sparkles,
+    color: "from-amber-400 to-orange-500",
+    glow: "#f59e0b",
+    progress: 99
   }
 ];
 
-export default function LoadingPoster() {
-  const [stageIndex, setStageIndex] = useState(0);
+export default function LoadingPoster({ isFinalStage = false }) {
+  const [stageIndex, setStageIndex] = useState(isFinalStage ? 3 : 0);
 
   useEffect(() => {
+    if (isFinalStage) return;
     const timer1 = setTimeout(() => setStageIndex(1), 3500);
     const timer2 = setTimeout(() => setStageIndex(2), 8500);
 
@@ -42,7 +52,7 @@ export default function LoadingPoster() {
       clearTimeout(timer1);
       clearTimeout(timer2);
     };
-  }, []);
+  }, [isFinalStage]);
 
   const currentStage = STAGES[stageIndex];
   const IconComponent = currentStage.icon;
@@ -94,7 +104,7 @@ export default function LoadingPoster() {
                   {currentStage.title}
                 </span>
                 <span className="text-[10px] font-mono font-semibold text-white/70 bg-white/10 px-2 py-0.5 rounded-full border border-white/10 shrink-0 ml-2">
-                  Step {currentStage.id} of 3
+                  Step {currentStage.id} of 4
                 </span>
               </div>
               <p className="text-xs text-white/60 font-light truncate">
@@ -132,7 +142,7 @@ export default function LoadingPoster() {
           <Loader2 className="w-3.5 h-3.5 animate-spin text-white/50" />
           <span className="font-medium text-white/60 text-xs">Generating AI Release Poster...</span>
         </div>
-        <div className="text-white/40 font-mono text-xs">Step {currentStage.id}/3</div>
+        <div className="text-white/40 font-mono text-xs">Step {currentStage.id}/4</div>
       </div>
     </div>
   );

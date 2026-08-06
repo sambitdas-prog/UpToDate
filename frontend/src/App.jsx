@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { toPng } from 'html-to-image';
-import { Download, Loader2, Code, AlertTriangle, X, Sparkles, Zap, GitCompare, Upload, Share2, Info, AlertCircle, HelpCircle } from 'lucide-react';
+import { Download, Loader2, Code, AlertTriangle, X, Sparkles, Zap, GitCompare, Upload, Share2, Info, AlertCircle, HelpCircle, Undo2, Redo2 } from 'lucide-react';
 import Poster from './components/Poster';
 import LoadingPoster from './components/LoadingPoster';
 import ShareModal from './components/ShareModal';
@@ -30,9 +30,12 @@ class ErrorBoundary extends React.Component {
             <AlertCircle className="w-7 h-7" />
           </div>
           <h3 className="text-xl font-bold text-white mb-2">Poster Rendering Error</h3>
-          <p className="text-sm text-white/60 max-w-md mb-6 leading-relaxed">
+          <p className="text-sm text-white/60 max-w-md mb-2 leading-relaxed">
             An unexpected error occurred while rendering the release poster payload.
           </p>
+          <div className="text-xs text-red-400 mb-6 max-w-md text-left overflow-auto bg-black/40 p-4 rounded-xl font-mono">
+            {this.state.error && this.state.error.toString()}
+          </div>
           <button 
             onClick={() => this.setState({ hasError: false, error: null })}
             className="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/20 transition-all"
@@ -73,6 +76,7 @@ function App() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [shareImageUrl, setShareImageUrl] = useState('');
+  const [isFinalLoadingStage, setIsFinalLoadingStage] = useState(false);
   const [isGeneratingShareImage, setIsGeneratingShareImage] = useState(false);
   const [shareToastMessage, setShareToastMessage] = useState('');
   const [isFeatureSelectModalOpen, setIsFeatureSelectModalOpen] = useState(false);
@@ -81,6 +85,8 @@ function App() {
   const [isHowToUseModalOpen, setIsHowToUseModalOpen] = useState(false);
   
   const posterRef = useRef(null);
+  const posterActionsRef = useRef(null);
+  const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
 
   const showToast = (message) => {
     setToast({ visible: true, message });
@@ -206,19 +212,59 @@ function App() {
     }
   };
 
-  const handleFeatureSelectContinue = (selectedIndices, modifiedFeatures) => {
+  const handleFeatureSelectContinue = async (selectedIndices, modifiedFeatures) => {
     if (!pendingFetchedData) return;
     const allFeatures = modifiedFeatures || pendingFetchedData.features;
     const selectedFeatures = allFeatures.filter((_, idx) =>
       selectedIndices.includes(idx)
     );
-    const updatedData = {
-      ...pendingFetchedData,
-      features: selectedFeatures,
-    };
-    setPosterData(updatedData);
+    
+    // Smooth transition: close modal, show loading with final stage flag
     setIsFeatureSelectModalOpen(false);
-    setPendingFetchedData(null);
+    setIsFinalLoadingStage(true);
+    setLoading(true);
+
+    try {
+      const summaryApiUrl = import.meta.env.PROD ? '/api/v1/generate-summary' : 'http://localhost:8000/api/v1/generate-summary';
+      const response = await fetch(summaryApiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          app_name: pendingFetchedData.app_name,
+          features: selectedFeatures
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate summary');
+      }
+
+      const newContent = await response.json();
+      
+      const updatedData = {
+        ...pendingFetchedData,
+        headline: newContent.headline || pendingFetchedData.headline,
+        what_is_it: newContent.what_is_it || pendingFetchedData.what_is_it,
+        summary: newContent.summary || pendingFetchedData.summary,
+        features: selectedFeatures,
+      };
+      
+      setPosterData(updatedData);
+    } catch (err) {
+      console.error(err);
+      showToast("Could not generate tailored summary. Falling back to default.");
+      // Fallback
+      setPosterData({
+        ...pendingFetchedData,
+        features: selectedFeatures,
+      });
+    } finally {
+      setLoading(false);
+      setIsFinalLoadingStage(false);
+      setPendingFetchedData(null);
+    }
   };
 
   const handleDownload = async () => {
@@ -293,22 +339,58 @@ function App() {
     }
   };
 
+  const combinedPosterData = useMemo(() => {
+    return posterData ? { ...posterData, importedImages } : null;
+  }, [posterData, importedImages]);
+
   return (
     <div className="min-h-screen bg-black text-white relative overflow-x-hidden font-sans flex flex-col justify-between transition-all duration-700">
       {/* Top-Left Home Button (Only visible in Split View) */}
-      {isExpanded && (
-        <button
+      {/* Top-Left Logo / Home Button */}
+      {isExpanded && !loading && (
+        <button 
           onClick={() => {
             setIsExpanded(false);
             setPosterData(null);
             setError('');
-          }}
-          className="fixed top-6 left-6 md:top-8 md:left-8 z-50 flex items-center gap-2.5 text-white/80 hover:text-white transition-all group animate-fade-in"
+          }} 
+          className="fixed top-6 left-6 md:top-8 md:left-8 z-50 flex items-center gap-3 text-white hover:opacity-80 transition-opacity animate-fade-in group"
         >
           <Code className="w-6 h-6 group-hover:scale-110 transition-transform duration-300" />
           <span className="text-xl font-bold tracking-tight drop-shadow-md">UpToDate</span>
         </button>
       )}
+      
+      {/* Undo/Redo Buttons */}
+      {isExpanded && !loading && (
+        <div className="fixed top-16 left-6 md:top-20 md:left-8 z-50 flex items-center gap-2 animate-fade-in">
+          <button
+            onClick={() => posterActionsRef.current?.undo()}
+            disabled={!historyState.canUndo}
+            className={`flex items-center justify-center w-10 h-10 rounded-full border border-white/20 shadow-lg backdrop-blur-md transition-all ${
+              historyState.canUndo 
+                ? 'bg-white/10 text-white hover:bg-white/20 active:scale-95' 
+                : 'bg-black/20 text-white/30 cursor-not-allowed'
+            }`}
+            title="Undo (Ctrl+Z)"
+          >
+            <Undo2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => posterActionsRef.current?.redo()}
+            disabled={!historyState.canRedo}
+            className={`flex items-center justify-center w-10 h-10 rounded-full border border-white/20 shadow-lg backdrop-blur-md transition-all ${
+              historyState.canRedo 
+                ? 'bg-white/10 text-white hover:bg-white/20 active:scale-95' 
+                : 'bg-black/20 text-white/30 cursor-not-allowed'
+            }`}
+            title="Redo (Ctrl+Y)"
+          >
+            <Redo2 className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Top-Right GitHub Link Button (Only visible on Home screen before generation) */}
       {!isExpanded && !loading && (
         <a 
@@ -575,10 +657,10 @@ function App() {
           <div className={`flex-1 flex items-center justify-center relative z-10 w-full overflow-x-hidden max-h-screen p-4 md:p-8 animate-popup-scale ${posterData && !posterData.no_diff && !loading ? 'overflow-y-auto' : 'overflow-hidden'}`}>
             <div className="origin-top md:origin-center transform scale-[0.50] sm:scale-[0.60] lg:scale-[0.68] xl:scale-[0.72] 2xl:scale-[0.78] transition-transform my-auto">
               {loading ? (
-                <LoadingPoster />
+                <LoadingPoster isFinalStage={isFinalLoadingStage} />
               ) : (
                 <ErrorBoundary key={posterData?.headline || 'poster-error-boundary'}>
-                  <Poster key={posterData?.headline || 'poster'} ref={posterRef} data={{...posterData, importedImages}} />
+                  <Poster key={posterData?.headline || 'poster'} ref={posterRef} actionsRef={posterActionsRef} onHistoryUpdate={setHistoryState} data={combinedPosterData} />
                 </ErrorBoundary>
               )}
             </div>
@@ -605,12 +687,12 @@ function App() {
           All Rights Reserved | &copy; {new Date().getFullYear()}
         </div>
 
-        <div className="flex items-center justify-center gap-6 pt-2">
+        <div className="flex items-center justify-center gap-6 pt-2 relative z-20">
           <a
             href="https://github.com/sambitdas-prog"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-white/50 hover:text-white hover:scale-110 transition-all"
+            className="text-white/50 hover:text-white hover:scale-110 transition-all p-1 cursor-pointer"
             aria-label="GitHub"
           >
             <GithubIcon className="w-5 h-5" />
@@ -619,7 +701,7 @@ function App() {
             href="https://www.linkedin.com/in/sambit-das-806101382"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-white/50 hover:text-white hover:scale-110 transition-all"
+            className="text-white/50 hover:text-white hover:scale-110 transition-all p-1 cursor-pointer"
             aria-label="LinkedIn"
           >
             <LinkedinIcon className="w-5 h-5" />
@@ -628,7 +710,7 @@ function App() {
             href="https://www.facebook.com/sambitdas244"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-white/50 hover:text-white hover:scale-110 transition-all"
+            className="text-white/50 hover:text-white hover:scale-110 transition-all p-1 cursor-pointer"
             aria-label="Facebook"
           >
             <FacebookIcon className="w-5 h-5" />
@@ -637,7 +719,7 @@ function App() {
             href="https://www.instagram.com/somebitsss"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-white/50 hover:text-white hover:scale-110 transition-all"
+            className="text-white/50 hover:text-white hover:scale-110 transition-all p-1 cursor-pointer"
             aria-label="Instagram"
           >
             <InstagramIcon className="w-5 h-5" />
@@ -645,11 +727,11 @@ function App() {
         </div>
 
         {/* Right Corner Buttons on Same Row at Bottom Footer Side */}
-        <div className="w-full flex items-center justify-end gap-3 pt-2 sm:pt-0 sm:absolute sm:bottom-8 sm:right-4 md:right-0">
+        <div className="w-full sm:w-auto flex items-center justify-end gap-3 pt-2 sm:pt-0 sm:absolute sm:bottom-8 sm:right-4 md:right-0 z-10 pointer-events-none">
           <button
             type="button"
             onClick={() => setIsAboutModalOpen(true)}
-            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 hover:border-white/30 text-white/80 hover:text-white text-xs font-semibold transition-all shadow-sm group cursor-pointer"
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 hover:border-white/30 text-white/80 hover:text-white text-xs font-semibold transition-all shadow-sm group cursor-pointer pointer-events-auto"
           >
             <Info className="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform" />
             <span>About This Tool</span>
@@ -657,7 +739,7 @@ function App() {
           <button
             type="button"
             onClick={() => setIsHowToUseModalOpen(true)}
-            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 hover:border-white/30 text-white/80 hover:text-white text-xs font-semibold transition-all shadow-sm group cursor-pointer"
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 hover:border-white/30 text-white/80 hover:text-white text-xs font-semibold transition-all shadow-sm group cursor-pointer pointer-events-auto"
           >
             <HelpCircle className="w-4 h-4 text-purple-400 group-hover:scale-110 transition-transform" />
             <span>How To Use</span>

@@ -52,6 +52,10 @@ class GitHubRequest(BaseModel):
 # Alias for backwards compatibility
 AnalyzeRequest = GitHubRequest
 
+class GenerateSummaryRequest(BaseModel):
+    app_name: str
+    features: list[dict]
+
 def parse_github_url(url: str):
     """Extracts owner and repo from a GitHub URL."""
     if not url or not url.strip():
@@ -638,7 +642,76 @@ Here is the diff (IMPORTANT: Extract every distinct new feature, capability, and
             raise HTTPException(status_code=400, detail="Invalid Gemini API Key. Please verify that your API key from https://aistudio.google.com/app/apikey is correctly saved in backend/.env.")
         raise HTTPException(status_code=500, detail=f"Failed to generate analysis: {err_str}")
 
+@app.post("/api/v1/generate-summary")
+async def generate_summary(req: GenerateSummaryRequest):
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="Gemini API Key is missing.")
+
+    features_json = json.dumps(req.features, indent=2)
+    num_features = len(req.features)
+    
+    if num_features <= 4:
+        generation_rules = """
+- The 'headline' MUST explicitly mention the key aspects of these selected features. (e.g. "Update: Feature 1, Feature 2 & Feature 3").
+- The 'what_is_it' MUST give a short and clear summary of ALL these selected features. Do not leave any out.
+"""
+    else:
+        generation_rules = """
+- The 'headline' MUST be a beautiful summarized heading that explicitly mentions two or three of the most prominent selected features, and then MUST end exactly with "& So On".
+- The 'what_is_it' MUST clearly describe ALL the selected features in short. Do not leave any selected feature unmentioned in the summary.
+"""
+
+    prompt = f"""
+Act as a product marketer and copywriter. You are writing the main headline and summary for a release notes poster for the application '{req.app_name}'.
+Below is the exact list of features that the user has selected to showcase in this specific update:
+{features_json}
+
+Your task is to generate a cohesive, catchy, and accurate headline and summary that summarizes ONLY these specific features.
+{generation_rules}
+- The 'what_is_it' should be a concise 1-2 sentence explanation of the practical benefit of these specific features combined.
+
+Enforce this strict JSON output schema:
+{{
+  "headline": "A short, engaging release title following the rules above",
+  "what_is_it": "A 1-2 sentence summary explaining the practical benefit and covering all features",
+  "summary": "Same as what_is_it"
+}}
+"""
+    candidate_models = [
+        "gemini-3.1-pro",
+        "gemini-3.5-flash",
+        "gemini-3.6-flash",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash"
+    ]
+    last_error = None
+
+    for model_name in candidate_models:
+        try:
+            model = genai.GenerativeModel(
+                model_name=model_name,
+                generation_config=genai.GenerationConfig(
+                    response_mime_type="application/json",
+                    temperature=0.3
+                )
+            )
+            response = await asyncio.to_thread(model.generate_content, prompt)
+            
+            raw_text = response.text.strip()
+            if raw_text.startswith("```json"):
+                raw_text = raw_text.split("```json")[1].split("```")[0].strip()
+            elif raw_text.startswith("```"):
+                raw_text = raw_text.split("```")[1].strip()
+            
+            data = json.loads(raw_text)
+            return JSONResponse(content=data)
+        except Exception as e:
+            last_error = e
+            print(f"Model {model_name} failed: {e}. Trying fallback...")
+            
+    err_str = str(last_error)
+    raise HTTPException(status_code=500, detail=f"Failed to generate summary: {err_str}")
+
 @app.get("/")
 def read_root():
     return {"message": "UpToDate API is running."}
-
